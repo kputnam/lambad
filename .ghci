@@ -2,3 +2,4 @@
 :m + Data.Attoparsec.Text
 :m + Language.Lambad.Syntax
 :m + Language.Lambad.Parser
+:m + Language.Lambad.Pretty

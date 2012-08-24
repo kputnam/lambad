@@ -18,11 +18,13 @@ parseFile
 
 parseDecl :: Parser Declaration
 parseDecl
-  = Declaration <$> (declare *> name) <*> body
+  = skipSpace *> decl
   where
-    declare = string "declare" <* skipSpace1
-    name    = parseVarId       <* skipSpace1
+    declare = string "define" <* skipSpace1
+    name    = parseVarId      <* skipSpace1
     body    = parseExpr
+    decl    = parenthesized decl
+          <|> Declaration <$> (declare *> name) <*> body
 
 parseExpr :: Parser Expression
 parseExpr

@@ -46,6 +46,7 @@ library
   exposed-modules:
     Language.Lambad.Syntax
     Language.Lambad.Parser
+    Language.Lambad.Pretty
 
 -- test-suite main
 --   type: exitcode-stdio-1.0
