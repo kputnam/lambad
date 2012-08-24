@@ -26,10 +26,10 @@ parseDecl
 
 parseExpr :: Parser Expression
 parseExpr
-  = skipSpace *> next
+  = skipSpace *> (appl <|> expr)
   where
-    next = parseAbs
-       <|> parseApp
+    appl = Application <$> expr <* skipSpace <*> expr
+    expr = parseAbs
        <|> parseVar
        <|> parenthesized parseExpr
 
@@ -41,17 +41,13 @@ parseAbs
     name   = parseVarId      <* skipSpace1
     body   = parseExpr
 
-parseApp :: Parser Expression
-parseApp
-  = Application <$> parseExpr <*> parseExpr
-
 parseVar :: Parser Expression
 parseVar
   = Variable <$> parseVarId
 
 parseVarId :: Parser Text
 parseVarId
-  = takeWhile1 isAlphaNum
+  = takeWhile1 (notInClass " \r\n\t\v\f()")
 
 ---------------------------------------------------------------------------
 
