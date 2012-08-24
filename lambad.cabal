@@ -1,0 +1,68 @@
+name:           lambad
+version:        0.0.0
+cabal-version:  >= 1.8
+license:        BSD3
+license-file:   LICENSE.md
+author:         Kyle Putnam <putnam.kyle@gmail.com>
+maintainer:     Kyle Putnam <putnam.kyle@gmail.com>
+homepage:       https://github.com/kputnam/lambad
+category:       Language
+build-type:     Simple
+synopsis:       Lambad programming language
+description:
+  Lambad programming language
+
+-- executable lambad-parse
+--   main-is: parse.hs
+--   hs-source-dirs: bin
+-- 
+--   build-depends:
+--     lambad,
+--     base >= 3 && <5,
+--     text >= 0.11.2.0,
+--     attoparsec >= 0.10.1.0
+-- 
+-- executable lambad-eval
+--   main-is: eval.hs
+--   hs-source-dirs: bin
+-- 
+--   build-depends:
+--     lambad,
+--     base >= 3 && <5,
+--     text >= 0.11.2.0,
+--     attoparsec >= 0.10.1.0
+
+library
+  hs-source-dirs: src
+
+  build-depends:
+    mtl >= 2.1.0,
+    base >= 3 && <5,
+    text >= 0.11.2.0,
+    pretty >= 1.1.1.0,
+    attoparsec >= 0.10.1.0,
+    containers >= 0.4.2.0
+
+  exposed-modules:
+    Language.Lambad.Syntax
+    Language.Lambad.Parser
+
+-- test-suite main
+--   type: exitcode-stdio-1.0
+--   main-is: Main.hs
+--   hs-source-dirs: tests
+-- 
+--   build-depends:
+--     lambad,
+--     base >= 3 && <5,
+--     text >= 0.11.2.0,
+--     HUnit >= 1.2,
+--     QuickCheck >= 2.4,
+--     attoparsec >= 0.10.1.0,
+--     test-framework,
+--     test-framework-hunit >= 0.2,
+--     test-framework-quickcheck2 >= 0.2
+
+source-repository head
+  type:     git
+  location: https://github.com/kputnam/lambad
