@@ -20,7 +20,7 @@ parseDecl :: Parser Declaration
 parseDecl
   = skipSpace *> decl
   where
-    declare = string "define" <* skipSpace1
+    declare = string "declare" <* skipSpace1
     name    = parseVarId      <* skipSpace1
     body    = parseExpr
     decl    = parenthesized decl
