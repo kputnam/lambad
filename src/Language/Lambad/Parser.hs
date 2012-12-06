@@ -16,25 +16,28 @@ parseFile :: Parser [Declaration]
 parseFile
   = many1 parseDecl <* skipSpace
 
+-- declare name body
 parseDecl :: Parser Declaration
 parseDecl
   = skipSpace *> decl
   where
     declare = string "declare" <* skipSpace1
-    name    = parseVarId      <* skipSpace1
+    name    = parseVarId       <* skipSpace1
     body    = parseExpr
     decl    = parenthesized decl
           <|> Declaration <$> (declare *> name) <*> body
 
 parseExpr :: Parser Expression
 parseExpr
-  = skipSpace *> (appl <|> expr)
+  = right =<< expr
   where
-    appl = Application <$> expr <* skipSpace <*> expr
-    expr = parseAbs
-       <|> parseVar
-       <|> parenthesized parseExpr
+    right = liftA2 (<|>) app pure
+    app f = right =<< Application f <$> expr
+    expr  = skipSpace *> (parseAbs
+                     <|>  parseVar
+                     <|>  parenthesized parseExpr)
 
+-- lambda x body
 parseAbs :: Parser Expression
 parseAbs
   = Abstraction <$> (lambda *> name) <*> body
@@ -49,7 +52,7 @@ parseVar
 
 parseVarId :: Parser Text
 parseVarId
-  = takeWhile1 (notInClass " \r\n\t\v\f()")
+  = takeWhile1 (notInClass " \r\n\t()")
 
 ---------------------------------------------------------------------------
 
