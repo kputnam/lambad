@@ -1,6 +1,11 @@
+:set prompt "% "
 :set -XOverloadedStrings
+:m + Data.Text
 :m + Data.Attoparsec.Text
 :m + Language.Lambad.Eval
+:m + Language.Lambad.Misc
 :m + Language.Lambad.Syntax
 :m + Language.Lambad.Parser
 :m + Language.Lambad.Pretty
+
+let eval e = runEval defaultEnv =<< evalStrict `fmap` (lmap pack $ parseOnly parseExpr e)

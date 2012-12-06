@@ -45,6 +45,7 @@ library
 
   exposed-modules:
     Language.Lambad.Eval
+    Language.Lambad.Misc
     Language.Lambad.Syntax
     Language.Lambad.Parser
     Language.Lambad.Pretty
