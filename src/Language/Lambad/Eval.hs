@@ -54,6 +54,7 @@ extendEnv = M.insert
 -- We're using majiks here, because we want each top-level definition to
 -- be able to reference any other top-level definition (including itself)
 -- for the sake of convenience. This saves from having to sort definitions
+-- TODO: buildEnv :: [Declaration] -> Environment
 defaultEnv :: Environment
 defaultEnv
   = M.fromList $ map (second closure) definitions
@@ -61,24 +62,28 @@ defaultEnv
     parse s     = T.pack `lmap` parseOnly parseExpr s
     eval s      = runEval defaultEnv =<< evalLexical `fmap` parse s
     closure s   = either (error . T.unpack) id $ eval s
-    definitions = [("id"    , "lambda x x")
-                  ,("fix"   , "(lambda f lambda x f (x x)) (lambda f lambda x f (x x))")
-                  ,("apply" , "lambda f lambda x f x")              -- id
-                  ,("const" , "lambda x lambda _ x")
-                  ,("flip"  , "lambda f lambda a lambda b f b a")
+    definitions = [("id"    , "lambda x. x")
+                  ,("apply" , "lambda f. lambda x. f x") -- id
+                  ,("const" , "lambda x. lambda y. x")
+                  ,("flip"  , "lambda f. lambda a. lambda b. f b a")
+                  ,("S"     , "lambda x. lambda y. lambda z. x z (y z)") -- reader
+                  ,("K"     , "lambda x. lambda y. lambda x") -- const
+                  ,("I"     , "lambda x. x") -- id
+                  ,("Y"     , "(lambda f. lambda x. f (x x)) (lambda f. lambda x. f (x x))")
+                  ,("Z"     , "(lambda f. lambda x. f (lambda y. (x x) y)) (lambda f. lambda x. f (lambda y. (x x) y))")
                   
                   -- Bool : a -> a -> a
-                  ,("if"    , "lambda x lambda t lambda f (x t) f")
-                  ,("not"   , "lambda x lambda t lambda f (x f) t")
-                  ,("true"  , "lambda t lambda f t")
-                  ,("false" , "lambda t lambda f f")
-                  ,("or"    , "lambda x lambda y (x x) y")
-                  ,("and"   , "lambda x lambda y (x y) x")
+                  ,("if"    , "lambda x. lambda t. lambda f. (x t) f")
+                  ,("not"   , "lambda x. lambda t. lambda f. (x f) t")
+                  ,("true"  , "lambda t. lambda f. t") -- const
+                  ,("false" , "lambda t. lambda f. f") -- flip const
+                  ,("or"    , "lambda x. lambda y. (x x) y")
+                  ,("and"   , "lambda x. lambda y. (x y) x")
                   ,("xor"   , "todo")
 
                   -- Nat : (a -> a) -> a -> a
-                  ,("succ"  , "lambda n lambda f lambda x f (n f x)")
-                  ,("0"     , "lambda f lambda x x")
+                  ,("succ"  , "lambda n. lambda f. lambda x. f (n f x)")
+                  ,("0"     , "lambda f. lambda x. x") -- flip const
                   ,("1"     , "succ 0")
                   ,("2"     , "succ 1")
                   ,("3"     , "succ 2")
@@ -88,16 +93,16 @@ defaultEnv
                   ,("7"     , "succ 6")
                   ,("8"     , "succ 7")
                   ,("9"     , "succ 8")
-                  ,("add"   , "lambda m lambda n lambda f lambda x (m f) ((n f) x)")
-                  ,("mul"   , "lambda m lambda n lambda f lambda x (m (n f)) x")
-                  ,("pow"   , "lambda m lambda n (n (mul m)) 1")
-                  ,("zero?" , "lambda n (n (const false)) true")
-                  ,("succ?" , "lambda n (n (const true)) false")
+                  ,("add"   , "lambda m. lambda n. lambda f. lambda x. (m f) ((n f) x)")
+                  ,("mul"   , "lambda m. lambda n. lambda f. lambda x. (m (n f)) x")
+                  ,("pow"   , "lambda m. lambda n. (n (mul m)) 1")
+                  ,("zero?" , "lambda n. (n (const false)) true")
+                  ,("succ?" , "lambda n. (n (const true)) false")
 
                   -- Pair a b : a -> b -> (a -> b -> c)
-                  ,("pair"  , "lambda a lambda b lambda f (f a) b")
-                  ,("fst"   , "lambda p p (lambda a lambda b a)")   -- flip apply tru
-                  ,("snd"   , "lambda p p (lambda a lambda b b)")   -- flip apply fls
+                  ,("pair"  , "lambda a. lambda b. lambda f. (f a) b")
+                  ,("fst"   , "lambda p. p (lambda a. lambda b. a)")   -- flip apply tru
+                  ,("snd"   , "lambda p. p (lambda a. lambda b. b)")   -- flip apply fls
 
                   -- List a : (a -> b -> b) -> b -> List a -> b
                   ,("fold"    , "todo")

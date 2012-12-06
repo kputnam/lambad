@@ -26,7 +26,7 @@ instance Pretty Expression where
     = parens $ pretty f <+> pretty x
 
   pretty (Abstraction x e)
-    = parens $ text "lambda" <+> text (unpack x) <+> pretty e
+    = parens $ text "lambda" <+> text (unpack x) <> text "." <+> pretty e
 
   pretty (Variable x)
     = text (unpack x)

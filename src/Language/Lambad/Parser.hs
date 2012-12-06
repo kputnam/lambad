@@ -43,7 +43,7 @@ parseAbs
   = Abstraction <$> (lambda *> name) <*> body
   where
     lambda = string "lambda" <* skipSpace1
-    name   = parseVarId      <* skipSpace1
+    name   = parseVarId      <* skipSpace <* char '.' <* skipSpace
     body   = parseExpr
 
 parseVar :: Parser Expression
@@ -52,7 +52,7 @@ parseVar
 
 parseVarId :: Parser Text
 parseVarId
-  = takeWhile1 (notInClass " \r\n\t()")
+  = takeWhile1 (notInClass " .\r\n\t()")
 
 ---------------------------------------------------------------------------
 
