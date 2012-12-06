@@ -1,6 +1,7 @@
 module Language.Lambad.Pretty
   ( renderText
   , renderString
+  , Pretty (..)
   ) where
 
 import Language.Lambad.Syntax

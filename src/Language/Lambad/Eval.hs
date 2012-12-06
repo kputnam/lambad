@@ -1,15 +1,12 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Language.Lambad.Eval
-  ( evalStrict
-  , evalLazy
+  ( evalLexical
   , evalDynamic
   , emptyEnv
   , defaultEnv
   , runEval
   ) where
-
-import Prelude hiding (lookup)
 
 import qualified Data.Map  as M
 import qualified Data.Text as T
@@ -19,8 +16,10 @@ import Control.Monad.Identity
 import Control.Monad.Reader
 import Control.Monad.Error
 
+import Language.Lambad.Misc
 import Language.Lambad.Syntax
 import Language.Lambad.Parser
+import Language.Lambad.Pretty
 import Data.Attoparsec.Text (parseOnly)
 
 type Id
@@ -29,10 +28,13 @@ type Id
 --------------------------------------------------------------------------------
 
 data Value
-  = VClosure Environment Id Expression
+  = VClosure Environment Expression
 
 instance Show Value where
-  show (VClosure _ x e) = "lambda " ++ T.unpack x ++ " " ++ show e
+  show (VClosure _ e) = "VClosure (" ++ show e ++ ")"
+
+instance Pretty Value where
+  pretty (VClosure _ e) = pretty $ Abstraction "_" e
 
 instance Error T.Text where
   noMsg   = ""
@@ -52,33 +54,31 @@ extendEnv = M.insert
 -- We're using majiks here, because we want each top-level definition to
 -- be able to reference any other top-level definition (including itself)
 -- for the sake of convenience. This saves from having to sort definitions
--- and also sneaks in general recursion.
 defaultEnv :: Environment
 defaultEnv
   = M.fromList $ map (second closure) definitions
   where
-    closure s   = case parseOnly parseExpr s of
-                    Right e -> evalStrict e
-                    Right (Abstraction x e) -> VClosure defaultEnv x e
-                    Right e                 -> VClosure defaultEnv "_" e
+    parse s     = T.pack `lmap` parseOnly parseExpr s
+    eval s      = runEval defaultEnv =<< evalLexical `fmap` parse s
+    closure s   = either (error . T.unpack) id $ eval s
     definitions = [("id"    , "lambda x x")
                   ,("fix"   , "(lambda f lambda x f (x x)) (lambda f lambda x f (x x))")
                   ,("apply" , "lambda f lambda x f x")              -- id
                   ,("const" , "lambda x lambda _ x")
-                  ,("flip"  , "lambda f lambda a lambda b (f b) a")
+                  ,("flip"  , "lambda f lambda a lambda b f b a")
                   
                   -- Bool : a -> a -> a
-                  ,("if"    , "lambda x lambda t lambda f (x t) f") -- id
-                  ,("not"   , "lambda x lambda t lambda f (x f) t") -- flip
-                  ,("true"  , "lambda t lambda f t")                -- const
-                  ,("false" , "lambda t lambda f f")                -- flip const
+                  ,("if"    , "lambda x lambda t lambda f (x t) f")
+                  ,("not"   , "lambda x lambda t lambda f (x f) t")
+                  ,("true"  , "lambda t lambda f t")
+                  ,("false" , "lambda t lambda f f")
                   ,("or"    , "lambda x lambda y (x x) y")
                   ,("and"   , "lambda x lambda y (x y) x")
                   ,("xor"   , "todo")
 
                   -- Nat : (a -> a) -> a -> a
-                  ,("succ"  , "lambda f lambda x f x")              -- id
-                  ,("0"     , "lambda f lambda x x")                -- flip const
+                  ,("succ"  , "lambda n lambda f lambda x f (n f x)")
+                  ,("0"     , "lambda f lambda x x")
                   ,("1"     , "succ 0")
                   ,("2"     , "succ 1")
                   ,("3"     , "succ 2")
@@ -117,40 +117,25 @@ defaultEnv
 type Eval a
   = ReaderT Environment (ErrorT T.Text Identity) a
 
-
 runEval :: Environment -> Eval a -> Either T.Text a
 runEval env action
   = runIdentity (runErrorT (runReaderT action env))
 
 --------------------------------------------------------------------------------
 
-evalStrict :: Expression -> Eval Value
-evalStrict (Variable x)
+evalLexical :: Expression -> Eval Value
+evalLexical (Variable x)
   = do env <- ask
        case M.lookup x env of
-         Just v  -> evalStrict v
+         Just v  -> return v
          Nothing -> throwError (T.append "undefined: " x)
-evalStrict (Abstraction x e)
+evalLexical e@(Abstraction _ _)
   = do env <- ask
-       return (VClosure env x e)
-evalStrict (Application f e)
-  = do (VClosure env x e') <- evalStrict f
-       argument            <- evalStrict e
-       local (const (extendEnv x argument env)) (evalStrict e')
-
---------------------------------------------------------------------------------
-
-evalLazy :: Expression -> Eval Value
-evalLazy (Variable x)
-  = do env <- ask
-       case M.lookup x env of
-         Just (VClosure env' _ e) -> local (const env') (evalLazy e)
-         Nothing                  -> throwError (T.append "undefined: " x)
-evalLazy e@(Abstraction _ _)
-  = do env <- ask
-       return (VClosure env "_" e)
-evalLazy (Application f e)
-  = undefined f e
+       return (VClosure env e)
+evalLexical (Application f e)
+  = do (VClosure env (Abstraction x e')) <- evalLexical f
+       argument                          <- evalLexical e
+       local (const (extendEnv x argument env)) (evalLexical e')
 
 --------------------------------------------------------------------------------
 
@@ -160,9 +145,9 @@ evalDynamic (Variable x)
        case M.lookup x env of
          Just v  -> return v
          Nothing -> throwError (T.append "undefined: " x)
-evalDynamic (Abstraction x e)
-  = return (VClosure emptyEnv x e)
+evalDynamic e@(Abstraction _ _)
+  = return (VClosure emptyEnv e)
 evalDynamic (Application f e)
-  = do (VClosure _ x e') <- evalDynamic f
-       argument          <- evalDynamic e
+  = do (VClosure _ (Abstraction x e')) <- evalDynamic f
+       argument                        <- evalDynamic e
        local (extendEnv x argument) (evalDynamic e')
