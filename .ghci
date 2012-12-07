@@ -8,4 +8,4 @@
 :m + Language.Lambad.Parser
 :m + Language.Lambad.Pretty
 
-let eval e = runEval defaultEnv =<< evalLexical `fmap` (lmap pack $ parseOnly parseExpr e)
+let eval v e = runEval defaultEnv =<< v `fmap` (lmap pack $ parseOnly parseExpr e)

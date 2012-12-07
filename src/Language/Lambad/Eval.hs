@@ -1,17 +1,28 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Language.Lambad.Eval
-  ( evalLexical
-  , evalDynamic
-  , emptyEnv
+  ( emptyEnv
   , defaultEnv
   , runEval
+  , defaultEval
+  , callByName
+  , normalOrder
+  , callByValue
+  , applicativeOrder
+  , hybridApplicative
+  , headSpine
+  , hybridNormal
   ) where
 
 import qualified Data.Map  as M
 import qualified Data.Text as T
 
-import Control.Arrow
+import Data.List            ((\\), nub)
+import Data.Functor         ((<$>))
+import Data.Attoparsec.Text (parseOnly)
+import Control.Arrow        (second)
+import Control.Applicative  ((<*>))
+
 import Control.Monad.Identity
 import Control.Monad.Reader
 import Control.Monad.Error
@@ -20,7 +31,6 @@ import Language.Lambad.Misc
 import Language.Lambad.Syntax
 import Language.Lambad.Parser
 import Language.Lambad.Pretty
-import Data.Attoparsec.Text (parseOnly)
 
 type Id
   = T.Text
@@ -60,7 +70,7 @@ defaultEnv
   = M.fromList $ map (second closure) definitions
   where
     parse s     = T.pack `lmap` parseOnly parseExpr s
-    eval s      = runEval defaultEnv =<< evalLexical `fmap` parse s
+    eval s      = runEval defaultEnv =<< defaultEval `fmap` parse s
     closure s   = either (error . T.unpack) id $ eval s
     definitions = [("id"    , "lambda x. x")
                   ,("apply" , "lambda f. lambda x. f x") -- id
@@ -128,31 +138,135 @@ runEval env action
 
 --------------------------------------------------------------------------------
 
-evalLexical :: Expression -> Eval Value
-evalLexical (Variable x)
+defaultEval :: Expression -> Eval Value
+defaultEval (Variable x)
   = do env <- ask
        case M.lookup x env of
          Just v  -> return v
          Nothing -> throwError (T.append "undefined: " x)
-evalLexical e@(Abstraction _ _)
+defaultEval e@(Abstraction _ _)
   = do env <- ask
        return (VClosure env e)
-evalLexical (Application f e)
-  = do (VClosure env (Abstraction x e')) <- evalLexical f
-       argument                          <- evalLexical e
-       local (const (extendEnv x argument env)) (evalLexical e')
+defaultEval (Application f e)
+  = do (VClosure env (Abstraction x e')) <- defaultEval f
+       argument                          <- defaultEval e
+       local (const (extendEnv x argument env)) (defaultEval e')
+
+--------------------------------------------------------------------------------
+-- http://www.itu.dk/people/sestoft/papers/sestoft-lamreduce.pdf
+
+
+--                                     Reduce under λ
+--       +------------------+-----------------------+
+-- Strict|                Y |                     N |
+-- +-----+------------------+-----------------------+
+-- |   Y |      Normal form |      Weak normal form |
+-- |     | E ::= λx.E , x E |      E ::= λx.e , x E |
+-- |     | ao, no, ha, hn   | bv                    |
+-- +-----+------------------+-----------------------+
+-- |   N | Head normal form | Weak head normal form |
+-- |     | E ::= λx.E , x e |      E ::= λx.e , x e |
+-- |     | he               | bn                    |
+-- +-----+------------------+-----------------------+
+--                               e ::= x | λx.e | e e
+
+substitute :: (Id, Expression) -> Expression -> Expression
+substitute s (Application e f)
+  = Application (substitute s e) (substitute s f)
+substitute (x, v) e@(Variable x')
+  | x == x'   = v
+  | otherwise = e
+substitute s@(_, v) (Abstraction x b)
+  | x `notElem` freevars v = Abstraction x (substitute s b)
+  | otherwise = let x' = freshvar x (freevars v)
+                    b' = substitute (x, Variable x') b
+                 in Abstraction x' (substitute (x', v) b')
+  where
+    freshvar x xs
+      | x `elem` xs = freshvar (T.append x "'") xs
+      | otherwise   = x
+    freevars (Variable x)      = [x]
+    freevars (Application e f) = nub (freevars e ++ freevars f)
+    freevars (Abstraction x e) = freevars e \\ [x]
 
 --------------------------------------------------------------------------------
 
-evalDynamic :: Expression -> Eval Value
-evalDynamic (Variable x)
-  = do env <- ask
-       case M.lookup x env of
-         Just v  -> return v
-         Nothing -> throwError (T.append "undefined: " x)
-evalDynamic e@(Abstraction _ _)
-  = return (VClosure emptyEnv e)
-evalDynamic (Application f e)
-  = do (VClosure _ (Abstraction x e')) <- evalDynamic f
-       argument                        <- evalDynamic e
-       local (extendEnv x argument) (evalDynamic e')
+callByName :: Expression -> Eval Expression
+callByName = bn
+  where
+    bn e@(Variable _)      = return e
+    bn e@(Abstraction _ _) = return e
+    bn (Application (Abstraction x b) a)
+      = bn (substitute (x, a) b)
+    bn e@(Application _ _) = return e
+
+normalOrder :: Expression -> Eval Expression
+normalOrder = no
+  where
+    no e@(Variable _)    = return e
+    no (Abstraction x b) = Abstraction x <$> no b
+    no (Application f a)
+      = do f' <- callByName f
+           case f' of
+             Abstraction x b -> no (substitute (x, a) b)
+             _               -> Application <$> no f' <*> no a
+
+callByValue :: Expression -> Eval Expression
+callByValue = bv
+  where
+    bv e@(Variable _)      = return e
+    bv e@(Abstraction _ _) = return e
+    bv (Application f a)
+      = do f' <- bv f
+           a' <- bv a
+           case f' of
+             Abstraction x b -> bv (substitute (x, a') b)
+             _               -> return (Application f' a')
+
+applicativeOrder :: Expression -> Eval Expression
+applicativeOrder = ao
+  where
+    ao e@(Variable _)    = return e
+    ao (Abstraction x b) = Abstraction x <$> ao b
+    ao (Application f a)
+      = do f' <- ao f
+           a' <- ao a
+           case f' of
+             Abstraction x b -> ao (substitute (x, a') b)
+             _               -> return (Application f' a')
+
+hybridApplicative :: Expression -> Eval Expression
+hybridApplicative = ha
+  where
+    ha e@(Variable _)    = return e
+    ha (Abstraction x b) = Abstraction x <$> ha b
+    ha (Application f a)
+      = do f' <- ha f
+           a' <- ha a
+           case f' of
+             Abstraction x b -> ha (substitute (x, a') b)
+             _               -> flip Application a' <$> ha f'
+
+headSpine :: Expression -> Eval Expression
+headSpine = he
+  where
+    he e@(Variable _)    = return e
+    he (Abstraction x b) = Abstraction x <$> he b
+    he (Application f a)
+      = do f' <- he f
+           case f' of
+             Abstraction x b -> he (substitute (x, a) b)
+             _               -> return (Application f' a)
+
+hybridNormal :: Expression -> Eval Expression
+hybridNormal = hn
+  where
+    hn e@(Variable _)    = return e
+    hn (Abstraction x b) = Abstraction x <$> hn b
+    hn (Application f a)
+      = do f' <- headSpine f
+           case f' of
+             Abstraction x b -> hn (substitute (x, a) b)
+             _               -> Application <$> hn f' <*> hn a
+
+--------------------------------------------------------------------------------
