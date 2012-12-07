@@ -1,3 +1,5 @@
+{-# LANGUAGE UnicodeSyntax #-}
+
 module Language.Lambad.Pretty
   ( renderText
   , renderString
@@ -8,14 +10,14 @@ import Language.Lambad.Syntax
 import Data.Text
 import Text.PrettyPrint
 
-renderText :: Pretty a => a -> Text
+renderText ∷ Pretty a => a → Text
 renderText = pack . render . pretty
 
-renderString :: Pretty a => a -> String
+renderString ∷ Pretty a => a → String
 renderString = render . pretty
 
 class Pretty a where
-  pretty :: a -> Doc
+  pretty ∷ a → Doc
 
 instance Pretty Declaration where
   pretty (Declaration x e)
@@ -26,7 +28,7 @@ instance Pretty Expression where
     = parens $ pretty f <+> pretty x
 
   pretty (Abstraction x e)
-    = parens $ text "lambda" <+> text (unpack x) <> text "." <+> pretty e
+    = parens $ text "λ" <> text (unpack x) <> text "." <+> pretty e
 
   pretty (Variable x)
     = text (unpack x)

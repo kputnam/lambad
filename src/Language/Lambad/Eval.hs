@@ -1,3 +1,4 @@
+{-# LANGUAGE UnicodeSyntax #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Language.Lambad.Eval
@@ -55,17 +56,17 @@ instance Error T.Text where
 type Environment
   = M.Map Id Value
 
-emptyEnv :: Environment
+emptyEnv ∷ Environment
 emptyEnv = M.empty
 
-extendEnv :: Id -> Value -> Environment -> Environment
+extendEnv ∷ Id → Value → Environment → Environment
 extendEnv = M.insert
 
 -- We're using majiks here, because we want each top-level definition to
 -- be able to reference any other top-level definition (including itself)
 -- for the sake of convenience. This saves from having to sort definitions
--- TODO: buildEnv :: [Declaration] -> Environment
-defaultEnv :: Environment
+-- TODO: buildEnv ∷ [Declaration] → Environment
+defaultEnv ∷ Environment
 defaultEnv
   = M.fromList $ map (second closure) definitions
   where
@@ -82,7 +83,7 @@ defaultEnv
                   ,("Y"     , "(lambda f. lambda x. f (x x)) (lambda f. lambda x. f (x x))")
                   ,("Z"     , "(lambda f. lambda x. f (lambda y. (x x) y)) (lambda f. lambda x. f (lambda y. (x x) y))")
                   
-                  -- Bool : a -> a -> a
+                  -- Bool : a → a → a
                   ,("if"    , "lambda x. lambda t. lambda f. (x t) f")
                   ,("not"   , "lambda x. lambda t. lambda f. (x f) t")
                   ,("true"  , "lambda t. lambda f. t") -- const
@@ -91,7 +92,7 @@ defaultEnv
                   ,("and"   , "lambda x. lambda y. (x y) x")
                   ,("xor"   , "todo")
 
-                  -- Nat : (a -> a) -> a -> a
+                  -- Nat : (a → a) → a → a
                   ,("succ"  , "lambda n. lambda f. lambda x. f (n f x)")
                   ,("0"     , "lambda f. lambda x. x") -- flip const
                   ,("1"     , "succ 0")
@@ -109,12 +110,12 @@ defaultEnv
                   ,("zero?" , "lambda n. (n (const false)) true")
                   ,("succ?" , "lambda n. (n (const true)) false")
 
-                  -- Pair a b : a -> b -> (a -> b -> c)
+                  -- Pair a b : a → b → (a → b → c)
                   ,("pair"  , "lambda a. lambda b. lambda f. (f a) b")
                   ,("fst"   , "lambda p. p (lambda a. lambda b. a)")   -- flip apply tru
                   ,("snd"   , "lambda p. p (lambda a. lambda b. b)")   -- flip apply fls
 
-                  -- List a : (a -> b -> b) -> b -> List a -> b
+                  -- List a : (a → b → b) → b → List a → b
                   ,("fold"    , "todo")
                   ,("null"    , "todo")
                   ,("cons"    , "todo")
@@ -132,18 +133,18 @@ defaultEnv
 type Eval a
   = ReaderT Environment (ErrorT T.Text Identity) a
 
-runEval :: Environment -> Eval a -> Either T.Text a
+runEval ∷ Environment → Eval a → Either T.Text a
 runEval env action
   = runIdentity (runErrorT (runReaderT action env))
 
 --------------------------------------------------------------------------------
 
-defaultEval :: Expression -> Eval Value
+defaultEval ∷ Expression → Eval Value
 defaultEval (Variable x)
   = do env <- ask
        case M.lookup x env of
-         Just v  -> return v
-         Nothing -> throwError (T.append "undefined: " x)
+         Just v  → return v
+         Nothing → throwError (T.append "undefined: " x)
 defaultEval e@(Abstraction _ _)
   = do env <- ask
        return (VClosure env e)
@@ -153,24 +154,26 @@ defaultEval (Application f e)
        local (const (extendEnv x argument env)) (defaultEval e')
 
 --------------------------------------------------------------------------------
--- http://www.itu.dk/people/sestoft/papers/sestoft-lamreduce.pdf
 
-
---                                     Reduce under λ
+-- itu.dk/people/sestoft/papers/sestoft-lamreduce.pdf
+--                                                   
+--                                    Reduce under λ 
 --       +------------------+-----------------------+
 -- Strict|                Y |                     N |
 -- +-----+------------------+-----------------------+
 -- |   Y |      Normal form |      Weak normal form |
--- |     | E ::= λx.E , x E |      E ::= λx.e , x E |
--- |     | ao, no, ha, hn   | bv                    |
+-- |     |  E ∷= λx.E , x E |       E ∷= λx.e , x E |
+-- |     |                  |                       |
+-- |     |   ao, no, ha, hn |                    bv |
 -- +-----+------------------+-----------------------+
 -- |   N | Head normal form | Weak head normal form |
--- |     | E ::= λx.E , x e |      E ::= λx.e , x e |
--- |     | he               | bn                    |
+-- |     |  E ∷= λx.E , x e |       E ∷= λx.e , x e |
+-- |     |                  |                       |
+-- |     |               he |                    bn |
 -- +-----+------------------+-----------------------+
---                               e ::= x | λx.e | e e
+--                               e ∷= x | λx.e | e e 
 
-substitute :: (Id, Expression) -> Expression -> Expression
+substitute ∷ (Id, Expression) → Expression → Expression
 substitute s (Application e f)
   = Application (substitute s e) (substitute s f)
 substitute (x, v) e@(Variable x')
@@ -191,7 +194,7 @@ substitute s@(_, v) (Abstraction x b)
 
 --------------------------------------------------------------------------------
 
-callByName :: Expression -> Eval Expression
+callByName ∷ Expression → Eval Expression
 callByName = bn
   where
     bn e@(Variable _)      = return e
@@ -200,7 +203,7 @@ callByName = bn
       = bn (substitute (x, a) b)
     bn e@(Application _ _) = return e
 
-normalOrder :: Expression -> Eval Expression
+normalOrder ∷ Expression → Eval Expression
 normalOrder = no
   where
     no e@(Variable _)    = return e
@@ -208,10 +211,10 @@ normalOrder = no
     no (Application f a)
       = do f' <- callByName f
            case f' of
-             Abstraction x b -> no (substitute (x, a) b)
-             _               -> Application <$> no f' <*> no a
+             Abstraction x b → no (substitute (x, a) b)
+             _               → Application <$> no f' <*> no a
 
-callByValue :: Expression -> Eval Expression
+callByValue ∷ Expression → Eval Expression
 callByValue = bv
   where
     bv e@(Variable _)      = return e
@@ -220,10 +223,10 @@ callByValue = bv
       = do f' <- bv f
            a' <- bv a
            case f' of
-             Abstraction x b -> bv (substitute (x, a') b)
-             _               -> return (Application f' a')
+             Abstraction x b → bv (substitute (x, a') b)
+             _               → return (Application f' a')
 
-applicativeOrder :: Expression -> Eval Expression
+applicativeOrder ∷ Expression → Eval Expression
 applicativeOrder = ao
   where
     ao e@(Variable _)    = return e
@@ -232,10 +235,10 @@ applicativeOrder = ao
       = do f' <- ao f
            a' <- ao a
            case f' of
-             Abstraction x b -> ao (substitute (x, a') b)
-             _               -> return (Application f' a')
+             Abstraction x b → ao (substitute (x, a') b)
+             _               → return (Application f' a')
 
-hybridApplicative :: Expression -> Eval Expression
+hybridApplicative ∷ Expression → Eval Expression
 hybridApplicative = ha
   where
     ha e@(Variable _)    = return e
@@ -244,10 +247,10 @@ hybridApplicative = ha
       = do f' <- ha f
            a' <- ha a
            case f' of
-             Abstraction x b -> ha (substitute (x, a') b)
-             _               -> flip Application a' <$> ha f'
+             Abstraction x b → ha (substitute (x, a') b)
+             _               → flip Application a' <$> ha f'
 
-headSpine :: Expression -> Eval Expression
+headSpine ∷ Expression → Eval Expression
 headSpine = he
   where
     he e@(Variable _)    = return e
@@ -255,10 +258,10 @@ headSpine = he
     he (Application f a)
       = do f' <- he f
            case f' of
-             Abstraction x b -> he (substitute (x, a) b)
-             _               -> return (Application f' a)
+             Abstraction x b → he (substitute (x, a) b)
+             _               → return (Application f' a)
 
-hybridNormal :: Expression -> Eval Expression
+hybridNormal ∷ Expression → Eval Expression
 hybridNormal = hn
   where
     hn e@(Variable _)    = return e
@@ -266,7 +269,7 @@ hybridNormal = hn
     hn (Application f a)
       = do f' <- headSpine f
            case f' of
-             Abstraction x b -> hn (substitute (x, a) b)
-             _               -> Application <$> hn f' <*> hn a
+             Abstraction x b → hn (substitute (x, a) b)
+             _               → Application <$> hn f' <*> hn a
 
 --------------------------------------------------------------------------------
