@@ -1,17 +1,18 @@
 {-# LANGUAGE UnicodeSyntax #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Language.Lambad.Parser
+module Language.Pure.Parser
   ( parseExpr
   , parseFile
   , parseDecl
   ) where
 
-import Language.Lambad.Syntax
-import Control.Applicative hiding (empty)
 import Data.Char
 import Data.Text
 import Data.Attoparsec.Text
+import Control.Applicative hiding (empty)
+
+import Language.Pure.Syntax
 
 parseFile ∷ Parser [Declaration]
 parseFile
@@ -54,7 +55,7 @@ parseVar
 
 parseVarId ∷ Parser Text
 parseVarId
-  = takeWhile1 (notInClass " .\r\n\t()")
+  = takeWhile1 (`notElem` " .\r\n\t()")
 
 ---------------------------------------------------------------------------
 

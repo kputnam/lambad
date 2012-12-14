@@ -1,7 +1,7 @@
 {-# LANGUAGE UnicodeSyntax #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Language.Lambad.Syntax
+module Language.Pure.Syntax
   ( Expression(..)
   , Declaration(..)
   ) where

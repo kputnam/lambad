@@ -1,14 +1,15 @@
 {-# LANGUAGE UnicodeSyntax #-}
 
-module Language.Lambad.Pretty
+module Language.Pure.Pretty
   ( renderText
   , renderString
   , Pretty (..)
   ) where
 
-import Language.Lambad.Syntax
 import Data.Text
 import Text.PrettyPrint
+
+import Language.Pure.Syntax
 
 renderText ∷ Pretty a => a → Text
 renderText = pack . render . pretty

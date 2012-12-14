@@ -1,12 +1,12 @@
 {-# LANGUAGE UnicodeSyntax #-}
 
-module Language.Lambad.Misc
+module Language.Pure.Misc
   ( lmap
   , swap
   ) where
 
-import Control.Monad.Instances
-import Data.Either
+import Control.Monad.Instances ()
+import Data.Either (either)
 
 swap ∷ Either a b → Either b a
 swap = either Right Left
