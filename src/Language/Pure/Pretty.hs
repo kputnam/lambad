@@ -51,9 +51,9 @@ instance Pretty Expression where
     where
       xs    = reverse (fst inner)
       e'    = snd inner
-      inner = walk ([x], e)
-      walk (xs, Abstraction x e) = walk (x:xs, e)
-      walk (xs, e)               = (xs, e)
+      inner = collapse ([x], e)
+      collapse (xs, Abstraction x e) = collapse (x:xs, e)
+      collapse (xs, e)               = (xs, e)
 
   pretty (Variable x)
     = text (unpack x)

@@ -16,12 +16,12 @@ import Language.Pure.Syntax
 
 parseFile ∷ Parser [Declaration]
 parseFile
-  = many1 parseDecl <* skipSpace
+  = many1 (skipSpace *> parseDecl) <* skipSpace
 
 -- declare name body
 parseDecl ∷ Parser Declaration
 parseDecl
-  = skipSpace *> decl
+  = decl
   where
     declare = "declare"  .*> skipSpace1
     name    = parseVarId <*  skipSpace1
@@ -39,7 +39,7 @@ parseExpr
                      <|>  parseVar
                      <|>  parenthesized parseExpr)
 
--- lambda x body
+-- lambda x. body
 parseAbs ∷ Parser Expression
 parseAbs
   = lambda *> rest

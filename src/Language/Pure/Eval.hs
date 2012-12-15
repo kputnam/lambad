@@ -4,16 +4,16 @@
 module Language.Pure.Eval
   ( emptyEnv
   , runEval
-  , callByName          -- no
-  , normalOrder         -- no
-  , callByValue         -- no
-  , applicativeOrder    -- yes!
-  , hybridApplicative   -- yes!
-  , headSpine           -- no
-  , hybridNormal        -- yes! broken
+  , callByName
+  , normalOrder
+  , callByValue
+  , applicativeOrder
+  , hybridApplicative
+  , headSpine
+  , hybridNormal
+  , renderTrace
   , Eval(..)
   , Step(..)
-  , renderTrace
   ) where
 
 import qualified Data.Map  as M
@@ -48,27 +48,8 @@ data Step a
   | Consequent a
   deriving (Eq, Show)
 
-renderTrace ∷ Pretty a ⇒ [Step a] → T.Text
-renderTrace = T.unlines . map trace . indentTrace
-  where
-    trace (n, e)        = T.append (T.replicate n "  ") (step e)
-    step (Antecedent e) = T.append ">> " (renderText e)
-    step (Consequent e) = T.append "=> " (renderText e)
-
-indentTrace ∷ [Step a] → [(Int, Step a)]
-indentTrace = reverse . walk' 0 []
-  where walk' n r []                  = r
-        walk' n r (Antecedent x:xs) = walk' (n + 1) ((n,     Antecedent x):r) xs
-        walk' n r (Consequent x:xs) = walk' (n - 1) ((n - 1, Consequent x):r) xs
-
 type Environment a
   = M.Map Id a
-
-emptyEnv ∷ Environment a
-emptyEnv = M.empty
-
-extendEnv ∷ Id → a → Environment a → Environment a
-extendEnv = M.insert
 
 --------------------------------------------------------------------------------
 
@@ -79,7 +60,27 @@ runEval ∷ Environment a → Eval a → (Either T.Text a, [Step a])
 runEval env action
   = runIdentity $ runWriterT $ runErrorT $ runReaderT action env
 
+renderTrace ∷ Pretty a ⇒ [Step a] → T.Text
+renderTrace = T.unlines . map trace . indentTrace
+  where
+    trace (n, e)        = T.append (T.replicate n "  ") (step e)
+    step (Antecedent e) = T.append ">> " (renderText e)
+    step (Consequent e) = T.append "=> " (renderText e)
+
+indentTrace ∷ [Step a] → [(Int, Step a)]
+indentTrace = reverse . walk' 0 []
+  where
+    walk' n r []                  = r
+    walk' n r (Antecedent x:xs) = walk' (n + 1) ((n,     Antecedent x):r) xs
+    walk' n r (Consequent x:xs) = walk' (n - 1) ((n - 1, Consequent x):r) xs
+
 --------------------------------------------------------------------------------
+
+emptyEnv ∷ Environment a
+emptyEnv = M.empty
+
+extendEnv ∷ Id → a → Environment a → Environment a
+extendEnv = M.insert
 
 substitute ∷ (Id, Expression) → Expression → Expression
 substitute s (Application e f)
@@ -100,12 +101,12 @@ substitute s@(_, v) (Abstraction x b)
     freevars (Application e f) = nub (freevars e ++ freevars f)
     freevars (Abstraction x e) = freevars e \\ [x]
 
---------------------------------------------------------------------------------
-
 wrap ∷ (Expression → Eval a) → Expression → Eval a
 wrap r e = antecedent e *> r e >>= liftA2 (*>) consequent return
-  where antecedent e = tell [Antecedent e]
-        consequent e = tell [Consequent e]
+  where antecedent = tell . (:[]) . Antecedent
+        consequent = tell . (:[]) . Consequent
+
+--------------------------------------------------------------------------------
 
 callByName ∷ Expression → Eval Expression
 callByName = bn
@@ -191,17 +192,3 @@ hybridNormal = hn
            case f' of
              Abstraction x b → hn (substitute (x, a) b)
              _               → Application <$> hn f' <*> hn a
-
--- defaultEval ∷ Expression → Eval Value
--- defaultEval (Variable x)
---   = do env <- ask
---        case M.lookup x env of
---          Just v  → return v
---          Nothing → throwError (T.append "undefined: " x)
--- defaultEval e@(Abstraction _ _)
---   = do env <- ask
---        return (VClosure env e)
--- defaultEval (Application f e)
---   = do (VClosure env (Abstraction x e')) <- defaultEval f
---        argument                          <- defaultEval e
---        local (const (extendEnv x argument env)) (defaultEval e')
