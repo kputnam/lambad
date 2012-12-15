@@ -6,7 +6,8 @@ module Language.Pure.Pretty
   , Pretty (..)
   ) where
 
-import Data.Text
+import Prelude   hiding (unwords)
+import Data.Text hiding (reverse)
 import Text.PrettyPrint
 
 import Language.Pure.Syntax
@@ -45,7 +46,14 @@ instance Pretty Expression where
     = pretty f <+> pretty x
 
   pretty (Abstraction x e)
-    = text "λ" <> text (unpack x) <> text "." <+> pretty e
+    = text "λ" <> text (unpack (unwords xs))
+               <> text "." <+> pretty e'
+    where
+      xs    = reverse (fst inner)
+      e'    = snd inner
+      inner = walk ([x], e)
+      walk (xs, Abstraction x e) = walk (x:xs, e)
+      walk (xs, e)               = (xs, e)
 
   pretty (Variable x)
     = text (unpack x)

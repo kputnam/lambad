@@ -42,10 +42,10 @@ parseExpr
 -- lambda x body
 parseAbs ∷ Parser Expression
 parseAbs
-  = Abstraction <$> (lambda *> name) <*> body
+  = lambda *> rest
   where
-    name   = parseVarId <* skipSpace <* char '.' <* skipSpace
-    body   = parseExpr
+    rest   = Abstraction <$> parseVarId <*> (skipSpace *> (body <|> rest))
+    body   = "." .*> parseExpr
     lambda = ("lambda" .*> skipSpace1)
          <|> ("λ"      .*> skipSpace)
 
