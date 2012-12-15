@@ -13,6 +13,7 @@ module Language.Pure.Eval
   , hybridNormal        -- yes! broken
   , Eval(..)
   , Step(..)
+  , renderTrace
   ) where
 
 import qualified Data.Map  as M
@@ -46,6 +47,19 @@ data Step a
   = Antecedent Expression
   | Consequent a
   deriving (Eq, Show)
+
+renderTrace ∷ Pretty a ⇒ [Step a] → T.Text
+renderTrace = T.unlines . map trace . indentTrace
+  where
+    trace (n, e)        = T.append (T.replicate n "  ") (step e)
+    step (Antecedent e) = T.append ">> " (renderText e)
+    step (Consequent e) = T.append "=> " (renderText e)
+
+indentTrace ∷ [Step a] → [(Int, Step a)]
+indentTrace = reverse . walk' 0 []
+  where walk' n r []                  = r
+        walk' n r (Antecedent x:xs) = walk' (n + 1) ((n,     Antecedent x):r) xs
+        walk' n r (Consequent x:xs) = walk' (n - 1) ((n - 1, Consequent x):r) xs
 
 type Environment a
   = M.Map Id a

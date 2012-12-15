@@ -8,6 +8,7 @@ module Language.Pure.Repl
 
 import Data.Attoparsec.Text (parse, feed, IResult(..))
 import Data.Monoid (mempty)
+import Data.List (genericLength)
 import qualified Data.Text as T
 
 import Language.Pure.Eval
@@ -29,4 +30,7 @@ eval interpreter code
 
 pval ∷ Pretty a ⇒ (Expression → Eval a) → T.Text → IO ()
 pval interpreter code
-  = putStrLn $ either T.unpack renderString $ fst $ eval interpreter code
+  = do putStr   $ T.unpack (renderTrace log)
+       putStrLn $ show (genericLength log / 2) ++ " steps\n"
+       putStrLn $ either T.unpack renderString val
+  where (val, log) = eval interpreter code
