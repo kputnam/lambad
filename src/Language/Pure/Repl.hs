@@ -4,11 +4,11 @@
 module Language.Pure.Repl
   ( eval
   , pval
+  , aval
   ) where
 
 import Data.Attoparsec.Text (parse, feed, skipSpace, IResult(..))
 import Data.Monoid (mempty)
-import Data.List (genericLength)
 import Control.Applicative ((<*))
 import qualified Data.Text as T
 
@@ -31,7 +31,24 @@ eval interpreter code
 
 pval ∷ Pretty a ⇒ (Expression → Eval a) → T.Text → IO (Either T.Text a)
 pval interpreter code
-  = do putStr   $ T.unpack (renderTrace log)
-       putStrLn $ show (genericLength log / 2) ++ " steps\n"
+  = do putStr   $ T.unpack (renderTrace trace)
+       putStrLn $ show (length trace `div` 2) ++ " steps\n"
        return val
-  where (val, log) = eval interpreter code
+  where (val, trace) = eval interpreter code
+
+aval ∷ T.Text → IO ()
+aval code
+  = sequence_ [ putStrLn $ name ++ " (" ++ show nsteps ++ "): " ++ pretty
+              | (name, interpreter) <- es
+              , let (res, trace) = eval interpreter code
+              , let nsteps       = length trace `div` 2
+              , let pretty       = either T.unpack renderString res ]
+  where
+    es ∷ [(String, Expression → Eval Expression)]
+    es = [ ("bn", callByName)
+         , ("no", normalOrder)
+         , ("bv", callByValue)
+         , ("ao", applicativeOrder)
+         , ("ha", hybridApplicative)
+         , ("he", headSpine)
+         , ("hn", hybridNormal) ]
