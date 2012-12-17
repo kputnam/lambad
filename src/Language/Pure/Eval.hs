@@ -88,11 +88,12 @@ substitute s (Application e f)
 substitute (x, v) e@(Variable x')
   | x == x'   = v
   | otherwise = e
-substitute s@(_, v) (Abstraction x b)
-  | x `notElem` freevars v = Abstraction x (substitute s b)
-  | otherwise = let x' = freshvar x (freevars v)
-                    b' = substitute (x, Variable x') b
-                 in Abstraction x' (substitute (x', v) b')
+substitute s@(x, v) (Abstraction y b)
+  | x == y                 = Abstraction y b
+  | y `notElem` freevars v = Abstraction y (substitute s b)
+  | otherwise = let y' = freshvar y (freevars v)
+                    b' = substitute (y, Variable y') b
+                 in Abstraction y' (substitute (y', v) b')
   where
     freshvar x xs
       | x `elem` xs = freshvar (T.append x "'") xs
@@ -172,7 +173,7 @@ hybridApplicative = ha
 headSpine ∷ Expression → Eval Expression
 headSpine = he
   where
-    he = he'
+    he = wrap he'
     he' e@(Variable _)    = return e
     he' (Abstraction x b) = Abstraction x <$> he b
     he' (Application f a)
