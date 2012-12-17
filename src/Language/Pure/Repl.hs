@@ -41,14 +41,14 @@ aval code
   = sequence_ [ putStrLn $ name ++ " (" ++ show nsteps ++ "): " ++ pretty
               | (name, interpreter) <- es
               , let (res, trace) = eval interpreter code
-              , let nsteps       = length trace `div` 2
-              , let pretty       = either T.unpack renderString res ]
+              , let nsteps = length trace `div` 2
+              , let pretty = either (T.unpack . T.append "error: ") renderString res ]
   where
     es ∷ [(String, Expression → Eval Expression)]
-    es = [ ("bn", callByName)
-         , ("no", normalOrder)
-         , ("bv", callByValue)
-         , ("ao", applicativeOrder)
-         , ("ha", hybridApplicative)
-         , ("he", headSpine)
-         , ("hn", hybridNormal) ]
+    es = [("ao", applicativeOrder)
+         ,("no", normalOrder)
+         ,("ha", hybridApplicative)
+         ,("hn", hybridNormal)
+         ,("bv", callByValue)
+         ,("he", headSpine)
+         ,("bn", callByName)]

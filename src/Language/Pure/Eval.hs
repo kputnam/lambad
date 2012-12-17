@@ -24,7 +24,7 @@ import Data.Functor         ((<$>))
 import Data.Function        (on)
 import Data.Attoparsec.Text (parseOnly)
 import Control.Arrow        (second)
-import Control.Applicative  ((<*), (<*>), (*>), liftA2)
+import Control.Applicative
 
 import Control.Monad.Identity
 import Control.Monad.Reader
@@ -82,6 +82,7 @@ emptyEnv = M.empty
 extendEnv ∷ Id → a → Environment a → Environment a
 extendEnv = M.insert
 
+-- substitute (x, a) b = (λx.b) a
 substitute ∷ (Id, Expression) → Expression → Expression
 substitute s (Application e f)
   = Application (substitute s e) (substitute s f)
@@ -93,7 +94,7 @@ substitute s@(x, v) (Abstraction y b)
   | y `notElem` freevars v = Abstraction y (substitute s b)
   | otherwise = let y' = freshvar y (freevars v)
                     b' = substitute (y, Variable y') b
-                 in Abstraction y' (substitute (y', v) b')
+                 in Abstraction y' (substitute (y, v) b')
   where
     freshvar x xs
       | x `elem` xs = freshvar (T.append x "'") xs
@@ -102,94 +103,92 @@ substitute s@(x, v) (Abstraction y b)
     freevars (Application e f) = nub (freevars e ++ freevars f)
     freevars (Abstraction x e) = freevars e \\ [x]
 
-wrap ∷ (Expression → Eval a) → Expression → Eval a
-wrap r e = antecedent e *> r e >>= liftA2 (*>) consequent return
+trace ∷ (Expression → Eval a) → Expression → Eval a
+trace r e = antecedent e *> r e >>= liftA2 (*>) consequent return
   where antecedent = tell . (:[]) . Antecedent
         consequent = tell . (:[]) . Consequent
 
+applyM2 ∷ Monad m ⇒ (a → b → m c) → m a → m b → m c
+applyM2 f a b = join $ liftM2 f a b
+
 --------------------------------------------------------------------------------
 
+-- Reduce to weak head normal form
 callByName ∷ Expression → Eval Expression
 callByName = bn
   where
-    bn = wrap bn'
-    bn' e@(Variable _)      = return e
-    bn' e@(Abstraction _ _) = return e
-    bn' (Application (Abstraction x b) a)
-      = bn (substitute (x, a) b)
-    bn' e@(Application _ _) = return e
+    bn = trace bn'
+    bn' e@(Variable _)      = pure e
+    bn' e@(Abstraction _ _) = pure e
+    bn' (Application f a)   = applyM2 app (bn f) (pure a)
+    app (Abstraction x b) a = bn $ substitute (x, a) b
+    app f a                 = pure $ Application f a
 
+-- Reduce to normal form
 normalOrder ∷ Expression → Eval Expression
 normalOrder = no
   where
-    no = wrap no'
-    no' e@(Variable _)    = return e
-    no' (Abstraction x b) = Abstraction x <$> no b
-    no' (Application f a)
-      = do f' <- callByName f
-           case f' of
-             Abstraction x b → no (substitute (x, a) b)
-             _               → Application <$> no f' <*> no a
+    bn = callByName
+    no = trace no'
+    no' e@(Variable _)      = pure e
+    no' (Abstraction x b)   = Abstraction x <$> no b
+    no' (Application f a)   = applyM2 app (no f) (pure a)
+    app (Abstraction x b) a = no $ substitute (x, a) b
+    app f a                 = Application <$> no f <*> no a
 
+-- Reduce to weak normal form
 callByValue ∷ Expression → Eval Expression
 callByValue = bv
   where
-    bv = wrap bv'
-    bv' e@(Variable _)      = return e
-    bv' e@(Abstraction _ _) = return e
-    bv' (Application f a)
-      = do f' <- bv f
-           a' <- bv a
-           case f' of
-             Abstraction x b → bv (substitute (x, a') b)
-             _               → return (Application f' a')
+    bv = trace bv'
+    bv' e@(Variable _)      = pure e
+    bv' e@(Abstraction _ _) = pure e
+    bv' (Application f a)   = applyM2 app (bv f) (bv a)
+    app (Abstraction x b) a = bv $ substitute (x, a) b
+    app f a                 = pure $ Application f a
 
+-- Reduce to normal form
 applicativeOrder ∷ Expression → Eval Expression
 applicativeOrder = ao
   where
-    ao = wrap ao'
-    ao' e@(Variable _)    = return e
-    ao' (Abstraction x b) = Abstraction x <$> ao b
-    ao' (Application f a)
-      = do f' <- ao f
-           a' <- ao a
-           case f' of
-             Abstraction x b → ao (substitute (x, a') b)
-             _               → return (Application f' a')
+    ao = trace ao'
+    ao' e@(Variable _)      = pure e
+    ao' (Abstraction x b)   = Abstraction x <$> ao b
+    ao' (Application f a)   = applyM2 app (ao f) (ao a)
+    app (Abstraction x b) a = ao $ substitute (x, a) b
+    app f a                 = pure $ Application f a
 
+-- Reduce to normal form
 hybridApplicative ∷ Expression → Eval Expression
 hybridApplicative = ha
   where
-    ha = wrap ha'
-    ha' e@(Variable _)    = return e
-    ha' (Abstraction x b) = Abstraction x <$> ha b
-    ha' (Application f a)
-      = do f' <- ha f
-           a' <- ha a
-           case f' of
-             Abstraction x b → ha (substitute (x, a') b)
-             _               → flip Application a' <$> ha f'
+    bv = callByValue
+    ha = trace ha'
+    ha' e@(Variable _)      = pure e
+    ha' (Abstraction x b)   = Abstraction x <$> ha b
+    ha' (Application f a)   = applyM2 app (bv f) (ha a)
+    app (Abstraction x b) a = ha $ substitute (x, a) b
+    app f a                 = Application <$> ha f <*> pure a
 
+-- Reduce to head normal form
 headSpine ∷ Expression → Eval Expression
 headSpine = he
   where
-    he = wrap he'
-    he' e@(Variable _)    = return e
-    he' (Abstraction x b) = Abstraction x <$> he b
-    he' (Application f a)
-      = do f' <- he f
-           case f' of
-             Abstraction x b → he (substitute (x, a) b)
-             _               → return (Application f' a)
+    he = trace he'
+    he' e@(Variable _)      = pure e
+    he' (Abstraction x b)   = Abstraction x <$> he b
+    he' (Application f a)   = applyM2 app (he f) (pure a)
+    app (Abstraction x b) a = he $ substitute (x, a) b
+    app f a                 = pure $ Application f a
 
+-- Reduce to normal form
 hybridNormal ∷ Expression → Eval Expression
 hybridNormal = hn
   where
-    hn = wrap hn'
-    hn' e@(Variable _)    = return e
-    hn' (Abstraction x b) = Abstraction x <$> hn b
-    hn' (Application f a)
-      = do f' <- headSpine f
-           case f' of
-             Abstraction x b → hn (substitute (x, a) b)
-             _               → Application <$> hn f' <*> hn a
+    he = headSpine
+    hn = trace hn'
+    hn' e@(Variable _)      = pure e
+    hn' (Abstraction x b)   = Abstraction x <$> hn b
+    hn' (Application f a)   = applyM2 app (he f) (pure a)
+    app (Abstraction x b) a = hn $ substitute (x, a) b
+    app f a                 = Application <$> hn f <*> hn a
