@@ -30,6 +30,10 @@ instance Pretty Expression where
   pretty (Application f@(Abstraction _ _) x@(Abstraction _ _))
     = parens (pretty f) <+> parens (pretty x)
 
+  -- Render (λx.x) (e f) instead of (λx. x) e f
+  pretty (Application f@(Abstraction _ _) x@(Application _ _))
+    = parens (pretty f) <+> parens (pretty x)
+
   -- Render (λx.x) e instead of λx. x e
   pretty (Application f@(Abstraction _ _) x)
     = parens (pretty f) <+> pretty x
