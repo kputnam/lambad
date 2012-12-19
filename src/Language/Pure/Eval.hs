@@ -3,6 +3,8 @@
 
 module Language.Pure.Eval
   ( emptyEnv
+  , buildEnv
+  , extendEnv
   , runEval
   , callByName
   , normalOrder
@@ -14,6 +16,7 @@ module Language.Pure.Eval
   , renderTrace
   , Eval(..)
   , Step(..)
+  , Environment
   ) where
 
 import qualified Data.Map  as M
@@ -82,6 +85,15 @@ emptyEnv = M.empty
 extendEnv ∷ Id → a → Environment a → Environment a
 extendEnv = M.insert
 
+buildEnv ∷ (Expression → Eval a) → [Declaration] → Either T.Text (Environment a)
+buildEnv interpreter = be emptyEnv
+  where
+    be env [] = Right env
+    be env (Declaration id expr:xs)
+      = let (res, _) = runEval env (interpreter expr)
+        in do val <- res
+              be (extendEnv id val env) xs
+
 -- substitute (x, a) b = (λx.b) a
 substitute ∷ (Id, Expression) → Expression → Expression
 substitute s (Application e f)
@@ -118,7 +130,8 @@ callByName ∷ Expression → Eval Expression
 callByName = bn
   where
     bn = trace bn'
-    bn' e@(Variable _)      = pure e
+    bn' :: Expression -> Eval Expression
+    bn' e@(Variable x)      = M.findWithDefault e x <$> ask
     bn' e@(Abstraction _ _) = pure e
     bn' (Application f a)   = applyM2 app (bn f) (pure a)
     app (Abstraction x b) a = bn $ substitute (x, a) b
@@ -130,7 +143,7 @@ normalOrder = no
   where
     bn = callByName
     no = trace no'
-    no' e@(Variable _)      = pure e
+    no' e@(Variable x)      = M.findWithDefault e x <$> ask
     no' (Abstraction x b)   = Abstraction x <$> no b
     no' (Application f a)   = applyM2 app (no f) (pure a)
     app (Abstraction x b) a = no $ substitute (x, a) b
@@ -141,7 +154,7 @@ callByValue ∷ Expression → Eval Expression
 callByValue = bv
   where
     bv = trace bv'
-    bv' e@(Variable _)      = pure e
+    bv' e@(Variable x)      = M.findWithDefault e x <$> ask
     bv' e@(Abstraction _ _) = pure e
     bv' (Application f a)   = applyM2 app (bv f) (bv a)
     app (Abstraction x b) a = bv $ substitute (x, a) b
@@ -152,7 +165,7 @@ applicativeOrder ∷ Expression → Eval Expression
 applicativeOrder = ao
   where
     ao = trace ao'
-    ao' e@(Variable _)      = pure e
+    ao' e@(Variable x)      = M.findWithDefault e x <$> ask
     ao' (Abstraction x b)   = Abstraction x <$> ao b
     ao' (Application f a)   = applyM2 app (ao f) (ao a)
     app (Abstraction x b) a = ao $ substitute (x, a) b
@@ -164,7 +177,7 @@ hybridApplicative = ha
   where
     bv = callByValue
     ha = trace ha'
-    ha' e@(Variable _)      = pure e
+    ha' e@(Variable x)      = M.findWithDefault e x <$> ask
     ha' (Abstraction x b)   = Abstraction x <$> ha b
     ha' (Application f a)   = applyM2 app (bv f) (ha a)
     app (Abstraction x b) a = ha $ substitute (x, a) b
@@ -175,7 +188,7 @@ headSpine ∷ Expression → Eval Expression
 headSpine = he
   where
     he = trace he'
-    he' e@(Variable _)      = pure e
+    he' e@(Variable x)      = M.findWithDefault e x <$> ask
     he' (Abstraction x b)   = Abstraction x <$> he b
     he' (Application f a)   = applyM2 app (he f) (pure a)
     app (Abstraction x b) a = he $ substitute (x, a) b
@@ -187,7 +200,7 @@ hybridNormal = hn
   where
     he = headSpine
     hn = trace hn'
-    hn' e@(Variable _)      = pure e
+    hn' e@(Variable x)      = M.findWithDefault e x <$> ask
     hn' (Abstraction x b)   = Abstraction x <$> hn b
     hn' (Application f a)   = applyM2 app (he f) (pure a)
     app (Abstraction x b) a = hn $ substitute (x, a) b

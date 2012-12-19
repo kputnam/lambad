@@ -34,21 +34,35 @@ http://www.itu.dk/people/sestoft/papers/sestoft-lamreduce.pdf
 
 ## How to Use
 
-There are three functions defined for use in GHCi. Both `eval` and `pval` take
-an reduction strategy (callByName, callByValue, normalOrder, applicativeOrder,
-hybridApplicative, hybridNormal, and headSpine) and a Text string denoting a
-lambda calculus expression.
+There are three functions defined for use in GHCi. Both `eval` and `evalPrint`
+take an reduction strategy (callByName, callByValue, normalOrder, hybridNormal,
+hybridApplicative, applicativeOrder, and headSpine), an environment, and a Text
+string denoting a lambda calculus expression.
 
 `eval` returns a value of type `(Either Text Expression, [Step Expression])`,
 where first element is either an error message or the result of the computation
 and the second element is a list of reduction steps.
 
-`pval` returns a value of type `Either Text Expression` and pretty-prints the
-reduction steps to the console as a side effect.
+`evalPrint` returns a value of type `Either Text Expression` and pretty-prints
+the reduction steps to the console as a side effect.
 
-`aval` takes only a Text string and evaluates the expression using each strategy
-and prints a table showing the number of subexpressions evaluated and the
-evaluated result.
+`evalEach` takes only an environment and a Text string. It evaluates the
+expression using each strategy and prints a table showing the number of
+subexpressions evaluated and the evaluated result.
+
+#### Environments
+
+Environments are used to resolve free variables, which otherwise are interpreted
+as data constructors. Use `emptyEnv` to skip resolving free variables.
+
+You can load definitions if you like, using `evalEnv` and providing a reduction
+strategy and a Text string with declarations formatted like:
+
+    (declare Z (lambda f x. x))
+    (declare S (lambda n f x. f (n f x)))
+
+This will return an `Environment Expression` value, which can be passed to the
+eval methods above.
 
 ### Example
 
@@ -58,10 +72,11 @@ line breaks are added for readability, but they aren't required.
     $ ghci
     > :set prompt "> "
 
-    > aval "(lambda Z S +. (+ (S (S Z)) (S (S Z))))
-              (lambda f x. x)
-              (lambda n f x. n f (f x))
-              (lambda m n f x. m f (n f x))"
+    > evalEach emptyEnv
+               "(lambda Z S +. (+ (S (S Z)) (S (S Z))))
+                  (lambda f x. x)
+                  (lambda n f x. n f (f x))
+                  (lambda m n f x. m f (n f x))"
 
     ao (284): λf x. f (f (f (f x)))
     no (310): λf x. f (f (f (f x)))
@@ -72,10 +87,11 @@ line breaks are added for readability, but they aren't required.
     bn (11): λf x. (λn f x. n f (f x)) ((λn f x. n f (f x)) (λf x. x)) f ((λn f x. n f (f x)) ((λn f x. n f (f x)) (λf x. x)) f x)
 
 
-    > pval applicativeOrder "(lambda Z S +. + (S (S Z)) (S (S Z)))
-                               (lambda f x. x)
-                               (lambda n f x. f (n f x))
-                               (lambda n m f x. m f (n f x))"
+    > evalPrint applicativeOrder emptyEnv
+                "(lambda Z S +. + (S (S Z)) (S (S Z)))
+                   (lambda f x. x)
+                   (lambda n f x. f (n f x))
+                   (lambda n m f x. m f (n f x))"
 
     ...
               => f (f x)
@@ -120,5 +136,20 @@ The result is the Church-encoded representation of 4: `λf x. f (f (f (f x)))`.
 
 ### Reading from a File
 
+    -- Reading an Expression from a file
+    > import Control.Applicative
     > import qualified Data.Text.IO as T
-    > pval applicativeOrder =<< T.readFile "example.plc"
+    > evalPrint applicativeOrder emptyEnv =<< T.readFile "example.pure"
+
+    -- Reading an Environment from a file
+    > let myEnv = either (const emptyEnv) id
+              <$> evalEnv hybridNormal
+              <$> T.readFile "library.pure"
+    > flip (evalPrint hybridNormal) "id" =<< myEnv
+
+    -- Doing both
+    > :{
+      do code <- T.readFile "example.pure"
+         env  <- myEnv
+         evalPrint hybridNormal env code
+      :}
