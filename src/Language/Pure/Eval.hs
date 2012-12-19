@@ -54,6 +54,15 @@ data Step a
 type Environment a
   = M.Map Id a
 
+-- α-Equivalence
+instance Eq Expression where
+  Variable x == Variable y           = x == y
+  Application f a == Application g b = f == g && a == b
+  Abstraction x f == Abstraction y g
+    | x == y    = f == g
+    | otherwise = f == substitute (y, Variable x) g
+  _ == _ = False
+
 --------------------------------------------------------------------------------
 
 type Eval a
@@ -115,6 +124,15 @@ substitute s@(x, v) (Abstraction y b)
     freevars (Application e f) = nub (freevars e ++ freevars f)
     freevars (Abstraction x e) = freevars e \\ [x]
 
+alphaEq ∷ Eq a ⇒ (Expression → Eval a) → Expression → Expression → Eval a
+alphaEq interpreter a b
+  = do a' <- interpreter a
+       b' <- interpreter b
+       interpreter (if a' == b' then true else false)
+  where
+    true   = Abstraction "t" (Abstraction "f" (Variable "t"))
+    false  = Abstraction "t" (Abstraction "f" (Variable "f"))
+
 trace ∷ (Expression → Eval a) → Expression → Eval a
 trace r e = antecedent e *> r e >>= liftA2 (*>) consequent return
   where antecedent = tell . (:[]) . Antecedent
@@ -135,6 +153,8 @@ callByName = bn
     bn' e@(Abstraction _ _) = pure e
     bn' (Application f a)   = applyM2 app (bn f) (pure a)
     app (Abstraction x b) a = bn $ substitute (x, a) b
+    app (Application (Variable "=") a) b
+                            = alphaEq hybridApplicative a b
     app f a                 = pure $ Application f a
 
 -- Reduce to normal form
@@ -147,6 +167,8 @@ normalOrder = no
     no' (Abstraction x b)   = Abstraction x <$> no b
     no' (Application f a)   = applyM2 app (no f) (pure a)
     app (Abstraction x b) a = no $ substitute (x, a) b
+    app (Application (Variable "=") a) b
+                            = alphaEq hybridApplicative a b
     app f a                 = Application <$> no f <*> no a
 
 -- Reduce to weak normal form
@@ -158,6 +180,8 @@ callByValue = bv
     bv' e@(Abstraction _ _) = pure e
     bv' (Application f a)   = applyM2 app (bv f) (bv a)
     app (Abstraction x b) a = bv $ substitute (x, a) b
+    app (Application (Variable "=") a) b
+                            = alphaEq hybridApplicative a b
     app f a                 = pure $ Application f a
 
 -- Reduce to normal form
@@ -169,6 +193,8 @@ applicativeOrder = ao
     ao' (Abstraction x b)   = Abstraction x <$> ao b
     ao' (Application f a)   = applyM2 app (ao f) (ao a)
     app (Abstraction x b) a = ao $ substitute (x, a) b
+    app (Application (Variable "=") a) b
+                            = alphaEq hybridApplicative a b
     app f a                 = pure $ Application f a
 
 -- Reduce to normal form
@@ -181,6 +207,8 @@ hybridApplicative = ha
     ha' (Abstraction x b)   = Abstraction x <$> ha b
     ha' (Application f a)   = applyM2 app (bv f) (ha a)
     app (Abstraction x b) a = ha $ substitute (x, a) b
+    app (Application (Variable "=") a) b
+                            = alphaEq hybridApplicative a b
     app f a                 = Application <$> ha f <*> pure a
 
 -- Reduce to head normal form
@@ -192,6 +220,8 @@ headSpine = he
     he' (Abstraction x b)   = Abstraction x <$> he b
     he' (Application f a)   = applyM2 app (he f) (pure a)
     app (Abstraction x b) a = he $ substitute (x, a) b
+    app (Application (Variable "=") a) b
+                            = alphaEq hybridApplicative a b
     app f a                 = pure $ Application f a
 
 -- Reduce to normal form
@@ -204,4 +234,6 @@ hybridNormal = hn
     hn' (Abstraction x b)   = Abstraction x <$> hn b
     hn' (Application f a)   = applyM2 app (he f) (pure a)
     app (Abstraction x b) a = hn $ substitute (x, a) b
+    app (Application (Variable "=") a) b
+                            = alphaEq hybridApplicative a b
     app f a                 = Application <$> hn f <*> hn a

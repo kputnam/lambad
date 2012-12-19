@@ -15,8 +15,8 @@ data Expression
   = Variable Id
   | Application Expression Expression
   | Abstraction Id Expression
-  deriving (Eq, Show)
+  deriving (Show)
 
 data Declaration
   = Declaration Id Expression
-  deriving (Eq, Show)
+  deriving (Show)
