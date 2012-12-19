@@ -106,7 +106,7 @@ substitute s@(x, v) (Abstraction y b)
   | y `notElem` freevars v = Abstraction y (substitute s b)
   | otherwise = let y' = freshvar y (freevars v)
                     b' = substitute (y, Variable y') b
-                 in Abstraction y' (substitute (y, v) b')
+                 in substitute s (Abstraction y' b')
   where
     freshvar x xs
       | x `elem` xs = freshvar (T.append x "'") xs
