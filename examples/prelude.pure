@@ -40,10 +40,7 @@
 (declare *      lambda m n f x. m (n f) x)
 (declare zero?  lambda n. n (const false) true)
 (declare succ?  lambda n. n (const true) false)
-(declare pred   lambda n. 
-  n (lambda p. p (lambda n n-1 f. f n-1 (succ n-1)))
-    (lambda f. f 0 0)
-    (lambda n _. n))
+(declare pred   lambda n f x. n (lambda g h. h (g f)) (const x) id)
 (declare -      lambda m n. n pred m)
 
 (declare pair   lambda a b f. f a b)
