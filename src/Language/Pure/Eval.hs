@@ -66,11 +66,11 @@ instance Eq Expression where
 --------------------------------------------------------------------------------
 
 type Eval a
-  = ReaderT (Environment a) (ErrorT T.Text (WriterT [Step a] Identity)) a
+  = ReaderT (Environment a, Bool) (ErrorT T.Text (WriterT [Step a] Identity)) a
 
 runEval ∷ Environment a → Eval a → (Either T.Text a, [Step a])
 runEval env action
-  = runIdentity $ runWriterT $ runErrorT $ runReaderT action env
+  = runIdentity $ runWriterT $ runErrorT $ runReaderT action (env, False)
 
 renderTrace ∷ Pretty a ⇒ [Step a] → T.Text
 renderTrace = T.unlines . map trace . indentTrace
@@ -133,6 +133,16 @@ alphaEq interpreter a b
     true   = Abstraction "t" (Abstraction "f" (Variable "t"))
     false  = Abstraction "t" (Abstraction "f" (Variable "f"))
 
+eqHelper ∷ (Expression, Expression) → Eval Expression → Eval Expression
+eqHelper (a, b) other
+  = do inLambda <- asks snd
+       if inLambda
+          then other
+          else alphaEq hybridApplicative a b
+
+inLambda ∷ Eval a → Eval a
+inLambda = local $ second (const True)
+
 trace ∷ (Expression → Eval a) → Expression → Eval a
 trace r e = antecedent e *> r e >>= liftA2 (*>) consequent return
   where antecedent = tell . (:[]) . Antecedent
@@ -149,12 +159,12 @@ callByName = bn
   where
     bn = trace bn'
     bn' :: Expression -> Eval Expression
-    bn' e@(Variable x)      = M.findWithDefault e x <$> ask
+    bn' e@(Variable x)      = M.findWithDefault e x <$> asks fst
     bn' e@(Abstraction _ _) = pure e
     bn' (Application f a)   = applyM2 app (bn f) (pure a)
     app (Abstraction x b) a = bn $ substitute (x, a) b
-    app (Application (Variable "=") a) b
-                            = alphaEq hybridApplicative a b
+    app f@(Application (Variable "=") a) b
+                            = eqHelper (a, b) (pure $ Application f b)
     app f a                 = pure $ Application f a
 
 -- Reduce to normal form
@@ -163,12 +173,12 @@ normalOrder = no
   where
     bn = callByName
     no = trace no'
-    no' e@(Variable x)      = M.findWithDefault e x <$> ask
-    no' (Abstraction x b)   = Abstraction x <$> no b
+    no' e@(Variable x)      = M.findWithDefault e x <$> asks fst
+    no' (Abstraction x b)   = inLambda (Abstraction x <$> no b)
     no' (Application f a)   = applyM2 app (no f) (pure a)
     app (Abstraction x b) a = no $ substitute (x, a) b
-    app (Application (Variable "=") a) b
-                            = alphaEq hybridApplicative a b
+    app f@(Application (Variable "=") a) b
+                            = eqHelper (a, b) (Application <$> no f <*> no b)
     app f a                 = Application <$> no f <*> no a
 
 -- Reduce to weak normal form
@@ -176,12 +186,12 @@ callByValue ∷ Expression → Eval Expression
 callByValue = bv
   where
     bv = trace bv'
-    bv' e@(Variable x)      = M.findWithDefault e x <$> ask
+    bv' e@(Variable x)      = M.findWithDefault e x <$> asks fst
     bv' e@(Abstraction _ _) = pure e
     bv' (Application f a)   = applyM2 app (bv f) (bv a)
     app (Abstraction x b) a = bv $ substitute (x, a) b
-    app (Application (Variable "=") a) b
-                            = alphaEq hybridApplicative a b
+    app f@(Application (Variable "=") a) b
+                            = eqHelper (a, b) (pure $ Application f b)
     app f a                 = pure $ Application f a
 
 -- Reduce to normal form
@@ -189,12 +199,12 @@ applicativeOrder ∷ Expression → Eval Expression
 applicativeOrder = ao
   where
     ao = trace ao'
-    ao' e@(Variable x)      = M.findWithDefault e x <$> ask
-    ao' (Abstraction x b)   = Abstraction x <$> ao b
+    ao' e@(Variable x)      = M.findWithDefault e x <$> asks fst
+    ao' (Abstraction x b)   = inLambda (Abstraction x <$> ao b)
     ao' (Application f a)   = applyM2 app (ao f) (ao a)
     app (Abstraction x b) a = ao $ substitute (x, a) b
-    app (Application (Variable "=") a) b
-                            = alphaEq hybridApplicative a b
+    app f@(Application (Variable "=") a) b
+                            = eqHelper (a, b) (pure $ Application f b)
     app f a                 = pure $ Application f a
 
 -- Reduce to normal form
@@ -203,12 +213,12 @@ hybridApplicative = ha
   where
     bv = callByValue
     ha = trace ha'
-    ha' e@(Variable x)      = M.findWithDefault e x <$> ask
-    ha' (Abstraction x b)   = Abstraction x <$> ha b
+    ha' e@(Variable x)      = M.findWithDefault e x <$> asks fst
+    ha' (Abstraction x b)   = inLambda (Abstraction x <$> ha b)
     ha' (Application f a)   = applyM2 app (bv f) (ha a)
     app (Abstraction x b) a = ha $ substitute (x, a) b
-    app (Application (Variable "=") a) b
-                            = alphaEq hybridApplicative a b
+    app f@(Application (Variable "=") a) b
+                            = eqHelper (a, b) (Application <$> ha f <*> pure b)
     app f a                 = Application <$> ha f <*> pure a
 
 -- Reduce to head normal form
@@ -216,12 +226,12 @@ headSpine ∷ Expression → Eval Expression
 headSpine = he
   where
     he = trace he'
-    he' e@(Variable x)      = M.findWithDefault e x <$> ask
-    he' (Abstraction x b)   = Abstraction x <$> he b
+    he' e@(Variable x)      = M.findWithDefault e x <$> asks fst
+    he' (Abstraction x b)   = inLambda (Abstraction x <$> he b)
     he' (Application f a)   = applyM2 app (he f) (pure a)
     app (Abstraction x b) a = he $ substitute (x, a) b
-    app (Application (Variable "=") a) b
-                            = alphaEq hybridApplicative a b
+    app f@(Application (Variable "=") a) b
+                            = eqHelper (a, b) (pure $ Application f b)
     app f a                 = pure $ Application f a
 
 -- Reduce to normal form
@@ -230,10 +240,10 @@ hybridNormal = hn
   where
     he = headSpine
     hn = trace hn'
-    hn' e@(Variable x)      = M.findWithDefault e x <$> ask
-    hn' (Abstraction x b)   = Abstraction x <$> hn b
+    hn' e@(Variable x)      = M.findWithDefault e x <$> asks fst
+    hn' (Abstraction x b)   = inLambda (Abstraction x <$> hn b)
     hn' (Application f a)   = applyM2 app (he f) (pure a)
     app (Abstraction x b) a = hn $ substitute (x, a) b
-    app (Application (Variable "=") a) b
-                            = alphaEq hybridApplicative a b
+    app f@(Application (Variable "=") a) b
+                            = eqHelper (a, b) (Application <$> hn f <*> hn b)
     app f a                 = Application <$> hn f <*> hn a
