@@ -1,25 +1,29 @@
 {-# LANGUAGE UnicodeSyntax #-}
+{-# LANGUAGE OverloadedStrings #-}
 
-module Language.Pure.Pretty
-  ( renderText
-  , renderString
-  , Pretty (..)
+module Lambad.Pure.Syntax
+  ( Expression(..)
+  , Declaration(..)
   ) where
 
-import Prelude   hiding (unwords)
-import Data.Text hiding (reverse)
+import Prelude    hiding (unwords)
+import Data.Text  hiding (reverse)
 import Text.PrettyPrint
 
-import Language.Pure.Syntax
+import Lambad.Pretty
 
-renderText ∷ Pretty a => a → Text
-renderText = pack . render . pretty
+type Id
+  = Text
 
-renderString ∷ Pretty a => a → String
-renderString = render . pretty
+data Expression
+  = Variable Id
+  | Application Expression Expression
+  | Abstraction Id Expression
+  deriving (Show)
 
-class Pretty a where
-  pretty ∷ a → Doc
+data Declaration
+  = Declaration Id Expression
+  deriving (Show)
 
 instance Pretty Declaration where
   pretty (Declaration x e)

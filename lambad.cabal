@@ -44,12 +44,12 @@ library
     containers >= 0.4.2.0
 
   exposed-modules:
-    Language.Pure.Repl
-    Language.Pure.Eval
-    Language.Pure.Misc
-    Language.Pure.Syntax
-    Language.Pure.Parser
-    Language.Pure.Pretty
+    Lambad.Misc
+    Lambad.Pretty
+    Lambad.Pure.Repl
+    Lambad.Pure.Eval
+    Lambad.Pure.Syntax
+    Lambad.Pure.Parser
 
 -- test-suite main
 --   type: exitcode-stdio-1.0

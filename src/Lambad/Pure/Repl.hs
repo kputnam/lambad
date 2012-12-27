@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE UnicodeSyntax #-}
 
-module Language.Pure.Repl
+module Lambad.Pure.Repl
   ( eval
   , evalPrint
   , evalEach
@@ -13,11 +13,11 @@ import Data.Monoid (mempty)
 import Control.Applicative ((<*), (<$>))
 import qualified Data.Text as T
 
-import Language.Pure.Eval
-import Language.Pure.Misc
-import Language.Pure.Parser
-import Language.Pure.Pretty
-import Language.Pure.Syntax
+import Lambad.Misc
+import Lambad.Pretty
+import Lambad.Pure.Eval
+import Lambad.Pure.Parser
+import Lambad.Pure.Syntax
 
 eval ∷ Pretty a ⇒ (Expression → Eval a)
                 → Environment a

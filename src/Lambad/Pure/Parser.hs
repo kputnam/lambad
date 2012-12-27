@@ -1,7 +1,7 @@
 {-# LANGUAGE UnicodeSyntax #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Language.Pure.Parser
+module Lambad.Pure.Parser
   ( parseExpr
   , parseFile
   , parseDecl
@@ -12,7 +12,7 @@ import Data.Text
 import Data.Attoparsec.Text
 import Control.Applicative hiding (empty)
 
-import Language.Pure.Syntax
+import Lambad.Pure.Syntax
 
 parseFile ∷ Parser [Declaration]
 parseFile

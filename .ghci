@@ -1,7 +1,8 @@
 :set -XOverloadedStrings
-:m + Language.Pure.Repl
-:m + Language.Pure.Eval
-:m + Language.Pure.Misc
-:m + Language.Pure.Syntax
-:m + Language.Pure.Parser
-:m + Language.Pure.Pretty
+:m + Lambad.Pretty
+:m + Lambad.Misc
+
+:m + Lambad.Pure.Repl
+:m + Lambad.Pure.Eval
+:m + Lambad.Pure.Syntax
+:m + Lambad.Pure.Parser
