@@ -1,7 +1,7 @@
 {-# LANGUAGE UnicodeSyntax #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Language.Pure.Eval
+module Lambad.Pure.Eval
   ( emptyEnv
   , buildEnv
   , extendEnv
@@ -23,9 +23,6 @@ import qualified Data.Map  as M
 import qualified Data.Text as T
 
 import Data.List            ((\\), nub)
-import Data.Functor         ((<$>))
-import Data.Function        (on)
-import Data.Attoparsec.Text (parseOnly)
 import Control.Arrow        (second)
 import Control.Applicative
 
@@ -34,10 +31,9 @@ import Control.Monad.Reader
 import Control.Monad.Writer
 import Control.Monad.Error
 
-import Language.Pure.Misc
-import Language.Pure.Syntax
-import Language.Pure.Parser
-import Language.Pure.Pretty
+import Lambad.Misc
+import Lambad.Pretty
+import Lambad.Pure.Syntax
 
 instance Error T.Text where
   noMsg   = ""
@@ -105,8 +101,8 @@ buildEnv interpreter = be emptyEnv
 
 -- substitute (x, a) b = (λx.b) a
 substitute ∷ (Id, Expression) → Expression → Expression
-substitute s (Application e f)
-  = Application (substitute s e) (substitute s f)
+substitute s (Application f a)
+  = Application (substitute s f) (substitute s a)
 substitute (x, v) e@(Variable x')
   | x == x'   = v
   | otherwise = e
@@ -124,21 +120,27 @@ substitute s@(x, v) (Abstraction y b)
     freevars (Application e f) = nub (freevars e ++ freevars f)
     freevars (Abstraction x e) = freevars e \\ [x]
 
-alphaEq ∷ Eq a ⇒ (Expression → Eval a) → Expression → Expression → Eval a
-alphaEq interpreter a b
-  = do a' <- interpreter a
-       b' <- interpreter b
-       interpreter (if a' == b' then true else false)
-  where
-    true   = Abstraction "t" (Abstraction "f" (Variable "t"))
-    false  = Abstraction "t" (Abstraction "f" (Variable "f"))
-
 eqHelper ∷ (Expression, Expression) → Eval Expression → Eval Expression
 eqHelper (a, b) other
   = do inLambda <- asks snd
        if inLambda
           then other
           else alphaEq hybridApplicative a b
+  where
+    alphaEq ∷ Eq a ⇒ (Expression → Eval a) → Expression → Expression → Eval a
+    alphaEq interpreter a b
+      = do a' <- interpreter a
+           b' <- interpreter b
+           interpreter (if a' == b' then true else false)
+      where
+        true   = Abstraction "t" (Abstraction "f" (Variable "t"))
+        false  = Abstraction "t" (Abstraction "f" (Variable "f"))
+
+etaReduce ∷ Expression → Expression
+etaReduce e@(Abstraction x (Application f y))
+  | Variable x == y = f
+  | otherwise       = e
+etaReduce e         = e
 
 inLambda ∷ Eval a → Eval a
 inLambda = local $ second (const True)
@@ -148,9 +150,6 @@ trace r e = antecedent e *> r e >>= liftA2 (*>) consequent return
   where antecedent = tell . (:[]) . Antecedent
         consequent = tell . (:[]) . Consequent
 
-applyM2 ∷ Monad m ⇒ (a → b → m c) → m a → m b → m c
-applyM2 f a b = join $ liftM2 f a b
-
 --------------------------------------------------------------------------------
 
 -- Reduce to weak head normal form
@@ -158,9 +157,8 @@ callByName ∷ Expression → Eval Expression
 callByName = bn
   where
     bn = trace bn'
-    bn' :: Expression -> Eval Expression
     bn' e@(Variable x)      = M.findWithDefault e x <$> asks fst
-    bn' e@(Abstraction _ _) = pure e
+    bn' e@(Abstraction _ _) = pure (etaReduce e)
     bn' (Application f a)   = applyM2 app (bn f) (pure a)
     app (Abstraction x b) a = bn $ substitute (x, a) b
     app f@(Application (Variable "=") a) b
@@ -174,7 +172,7 @@ normalOrder = no
     bn = callByName
     no = trace no'
     no' e@(Variable x)      = M.findWithDefault e x <$> asks fst
-    no' (Abstraction x b)   = inLambda (Abstraction x <$> no b)
+    no' (Abstraction x b)   = inLambda $ etaReduce . Abstraction x <$> no b
     no' (Application f a)   = applyM2 app (no f) (pure a)
     app (Abstraction x b) a = no $ substitute (x, a) b
     app f@(Application (Variable "=") a) b
@@ -187,7 +185,7 @@ callByValue = bv
   where
     bv = trace bv'
     bv' e@(Variable x)      = M.findWithDefault e x <$> asks fst
-    bv' e@(Abstraction _ _) = pure e
+    bv' e@(Abstraction _ _) = pure (etaReduce e)
     bv' (Application f a)   = applyM2 app (bv f) (bv a)
     app (Abstraction x b) a = bv $ substitute (x, a) b
     app f@(Application (Variable "=") a) b
@@ -200,7 +198,7 @@ applicativeOrder = ao
   where
     ao = trace ao'
     ao' e@(Variable x)      = M.findWithDefault e x <$> asks fst
-    ao' (Abstraction x b)   = inLambda (Abstraction x <$> ao b)
+    ao' (Abstraction x b)   = inLambda $ etaReduce . Abstraction x <$> ao b
     ao' (Application f a)   = applyM2 app (ao f) (ao a)
     app (Abstraction x b) a = ao $ substitute (x, a) b
     app f@(Application (Variable "=") a) b
@@ -214,7 +212,7 @@ hybridApplicative = ha
     bv = callByValue
     ha = trace ha'
     ha' e@(Variable x)      = M.findWithDefault e x <$> asks fst
-    ha' (Abstraction x b)   = inLambda (Abstraction x <$> ha b)
+    ha' (Abstraction x b)   = inLambda $ etaReduce . Abstraction x <$> ha b
     ha' (Application f a)   = applyM2 app (bv f) (ha a)
     app (Abstraction x b) a = ha $ substitute (x, a) b
     app f@(Application (Variable "=") a) b
@@ -227,7 +225,7 @@ headSpine = he
   where
     he = trace he'
     he' e@(Variable x)      = M.findWithDefault e x <$> asks fst
-    he' (Abstraction x b)   = inLambda (Abstraction x <$> he b)
+    he' (Abstraction x b)   = inLambda $ etaReduce . Abstraction x <$> he b
     he' (Application f a)   = applyM2 app (he f) (pure a)
     app (Abstraction x b) a = he $ substitute (x, a) b
     app f@(Application (Variable "=") a) b
@@ -241,7 +239,7 @@ hybridNormal = hn
     he = headSpine
     hn = trace hn'
     hn' e@(Variable x)      = M.findWithDefault e x <$> asks fst
-    hn' (Abstraction x b)   = inLambda (Abstraction x <$> hn b)
+    hn' (Abstraction x b)   = inLambda $ etaReduce . Abstraction x <$> hn b
     hn' (Application f a)   = applyM2 app (he f) (pure a)
     app (Abstraction x b) a = hn $ substitute (x, a) b
     app f@(Application (Variable "=") a) b
