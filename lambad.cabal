@@ -50,6 +50,9 @@ library
     Lambad.Pure.Eval
     Lambad.Pure.Syntax
     Lambad.Pure.Parser
+    Lambad.DeBruijn.Compile
+    Lambad.DeBruijn.Eval
+    Lambad.DeBruijn.Syntax
 
 -- test-suite main
 --   type: exitcode-stdio-1.0

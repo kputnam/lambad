@@ -6,3 +6,7 @@
 :m + Lambad.Pure.Eval
 :m + Lambad.Pure.Syntax
 :m + Lambad.Pure.Parser
+
+import Control.Applicative
+import qualified Lambad.DeBruijn.Compile  as C
+import qualified Lambad.DeBruijn.Eval     as D
