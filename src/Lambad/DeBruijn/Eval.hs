@@ -24,6 +24,7 @@ import qualified Data.Text as T
 
 import Control.Arrow (second)
 import Control.Applicative
+import Data.Maybe
 
 import Control.Monad.Identity
 import Control.Monad.Reader
@@ -131,7 +132,15 @@ eqHelper (a, b) other
         false  = Abstraction (Abstraction (BoundVariable 0))
 
 etaReduce ∷ Expression → Expression
-etaReduce (Abstraction (Application f (BoundVariable 0))) = f
+etaReduce e@(Abstraction (Application f (BoundVariable 0)))
+  = fromMaybe e (walk 0 f)
+  where
+    walk _ e@(FreeVariable _) = Just e
+    walk n (Application f a)  = Application <$> walk n f <*> walk n a
+    walk n (Abstraction b)    = Abstraction <$> walk (n+1) b
+    walk n (BoundVariable m)
+      | n == m    = Nothing
+      | otherwise = Just (BoundVariable (m-1))
 etaReduce e = e
 
 inLambda ∷ Eval a → Eval a

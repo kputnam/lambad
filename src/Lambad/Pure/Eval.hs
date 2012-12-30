@@ -99,7 +99,12 @@ buildEnv interpreter = be emptyEnv
         in do val <- res
               be (extendEnv id val env) xs
 
--- substitute (x, a) b = (λx.b) a
+freevars ∷ Expression → [Id]
+freevars (Variable x)      = [x]
+freevars (Application e f) = nub (freevars e ++ freevars f)
+freevars (Abstraction x e) = freevars e \\ [x]
+
+-- substitute (x, a) b = b[a/x] = (λx.b) a
 substitute ∷ (Id, Expression) → Expression → Expression
 substitute s (Application f a)
   = Application (substitute s f) (substitute s a)
@@ -116,9 +121,6 @@ substitute s@(x, v) (Abstraction y b)
     freshvar x xs
       | x `elem` xs = freshvar (T.append x "'") xs
       | otherwise   = x
-    freevars (Variable x)      = [x]
-    freevars (Application e f) = nub (freevars e ++ freevars f)
-    freevars (Abstraction x e) = freevars e \\ [x]
 
 eqHelper ∷ (Expression, Expression) → Eval Expression → Eval Expression
 eqHelper (a, b) other
@@ -138,9 +140,9 @@ eqHelper (a, b) other
 
 etaReduce ∷ Expression → Expression
 etaReduce e@(Abstraction x (Application f y))
-  | Variable x == y = f
-  | otherwise       = e
-etaReduce e         = e
+  | Variable x == y && x `notElem` freevars f = f
+  | otherwise = e
+etaReduce e   = e
 
 inLambda ∷ Eval a → Eval a
 inLambda = local $ second (const True)
