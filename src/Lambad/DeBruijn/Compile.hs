@@ -6,6 +6,7 @@ module Lambad.DeBruijn.Compile
   , fromPure
   ) where
 
+import Data.Monoid
 import Data.List
 import Data.Text                        as T hiding (length)
 import qualified Lambad.Pure.Syntax     as P
@@ -24,7 +25,7 @@ toPure = walk []
       let n = length xs
           q = n `mod` length alphabet
           r = n `div` length alphabet
-          x = T.append (alphabet !! q) (T.replicate r "'")
+          x = alphabet !! q <> T.replicate r "'"
        in P.Abstraction x $ walk (x:xs) b
 
 fromPure ∷ P.Expression → D.Expression

@@ -9,7 +9,7 @@ module Lambad.Pure.Repl
   ) where
 
 import Data.Attoparsec.Text (parse, feed, skipSpace, IResult(..))
-import Data.Monoid (mempty)
+import Data.Monoid
 import Control.Applicative ((<*), (<$>))
 import qualified Data.Text as T
 
@@ -49,7 +49,8 @@ evalEach code environment
               | (name, interpreter) <- es
               , let (res, trace) = eval interpreter environment code
               , let nsteps = length trace `div` 2
-              , let pretty = either (T.unpack . T.append "error: ") renderString res ]
+              , let pretty = either (T.unpack . ("error: " <>)) renderString res
+              ]
   where
     es ∷ [(String, Expression → Eval Expression)]
     es = [("ao", applicativeOrder)

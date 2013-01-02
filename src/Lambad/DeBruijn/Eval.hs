@@ -66,9 +66,9 @@ runEval env action
 renderTrace ∷ Pretty a ⇒ [Step a] → T.Text
 renderTrace = T.unlines . map trace . indentTrace
   where
-    trace (n, e)        = T.append (T.replicate n "  ") (step e)
-    step (Antecedent e) = T.append ">> " (renderText e)
-    step (Consequent e) = T.append "=> " (renderText e)
+    trace (n, e)        = T.replicate n "  " <> step e
+    step (Antecedent e) = ">> " <> renderText e
+    step (Consequent e) = "=> " <> renderText e
 
 indentTrace ∷ [Step a] → [(Int, Step a)]
 indentTrace = reverse . walk' 0 []
