@@ -54,6 +54,7 @@ library
     Lambad.DeBruijn.Eval
     Lambad.DeBruijn.Syntax
     Lambad.Machines.CEK
+    Lambad.Machines.CEKGo
 
 -- test-suite main
 --   type: exitcode-stdio-1.0

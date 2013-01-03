@@ -1,6 +1,7 @@
 {-# LANGUAGE UnicodeSyntax #-}
+{-# LANGUAGE OverloadedStrings #-}
 
-module Lambad.Machines.CEK
+module Lambad.Machines.CEKGo
   ( eval
   ) where
 
@@ -13,13 +14,13 @@ import Lambad.Pure.Syntax
 type Id
   = Text
 
-type Program
-  = Expression
-
--- C: Control
 data Value
   = Closure Id Program Environment
   deriving (Show)
+
+-- C: Control
+type Program
+  = Expression
 
 -- E: Environment
 type Environment
@@ -30,6 +31,7 @@ data Frame
   = Stop
   | Operand Value Frame                 -- need an operand
   | Operator Program Environment Frame  -- need an operator
+  | Mark Frame
 
 type State
   = (Program, Environment, Frame)
@@ -44,7 +46,6 @@ eval
     two (a, b, c)      = (a, b)
     fold s | final s   = s
            | otherwise = fold (step s)
-
 
 inject ∷ Program → State
 inject e
@@ -62,6 +63,17 @@ step (Variable x, ρ, κ)
   where
     unlift (Closure x b ρ) = (Abstraction x b, ρ, κ)
 
+-- Here pushes a marker onto the stack
+step (Application (Variable "here") e, ρ, κ)
+  = (e, ρ, Mark κ)
+
+-- Jump erases the stack up to the nearest marker
+step (Application (Variable "jump") e, ρ, κ)
+  = let find (Mark κ)         = κ
+        find (Operand _ κ)    = find κ
+        find (Operator _ _ κ) = find κ
+     in (e, ρ, find κ)
+
 -- For application, first evaluate the operator
 step (Application f a, ρ, κ)
   = (f, ρ, Operator a ρ κ)
@@ -69,6 +81,10 @@ step (Application f a, ρ, κ)
 -- We have an operator, next evaluate the operand
 step (Abstraction x b, ρ, Operator a ρ' κ)
   = (a, ρ', Operand (Closure x b ρ) κ)
+
+-- Remove the topmost marker, assuming e becomes a Value
+step (e, ρ, Mark κ)
+  = (e, ρ, κ)
 
 -- We have an operand, next evaluate operator body
 step (e, ρ, Operand (Closure x' b' ρ') κ)
