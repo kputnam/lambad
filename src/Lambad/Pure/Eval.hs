@@ -1,4 +1,3 @@
-{-# LANGUAGE UnicodeSyntax #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Lambad.Pure.Eval
@@ -64,18 +63,18 @@ instance Eq Expression where
 type Eval a
   = ReaderT (Environment a, Bool) (ErrorT T.Text (WriterT [Step a] Identity)) a
 
-runEval ∷ Environment a → Eval a → (Either T.Text a, [Step a])
+runEval :: Environment a -> Eval a -> (Either T.Text a, [Step a])
 runEval env action
   = runIdentity $ runWriterT $ runErrorT $ runReaderT action (env, False)
 
-renderTrace ∷ Pretty a ⇒ [Step a] → T.Text
+renderTrace :: Pretty a => [Step a] -> T.Text
 renderTrace = T.unlines . map trace . indentTrace
   where
     trace (n, e)        = T.replicate n "  " <> step e
     step (Antecedent e) = ">> " <> renderText e
     step (Consequent e) = "=> " <> renderText e
 
-indentTrace ∷ [Step a] → [(Int, Step a)]
+indentTrace :: [Step a] -> [(Int, Step a)]
 indentTrace = reverse . walk' 0 []
   where
     walk' n r []                  = r
@@ -84,13 +83,13 @@ indentTrace = reverse . walk' 0 []
 
 --------------------------------------------------------------------------------
 
-emptyEnv ∷ Environment a
+emptyEnv :: Environment a
 emptyEnv = M.empty
 
-extendEnv ∷ Id → a → Environment a → Environment a
+extendEnv :: Id -> a -> Environment a -> Environment a
 extendEnv = M.insert
 
-buildEnv ∷ (Expression → Eval a) → [Declaration] → Either T.Text (Environment a)
+buildEnv :: (Expression -> Eval a) -> [Declaration] -> Either T.Text (Environment a)
 buildEnv interpreter = be emptyEnv
   where
     be env [] = Right env
@@ -99,13 +98,13 @@ buildEnv interpreter = be emptyEnv
         in do val <- res
               be (extendEnv id val env) xs
 
-freevars ∷ Expression → [Id]
+freevars :: Expression -> [Id]
 freevars (Variable x)      = [x]
 freevars (Application e f) = nub (freevars e ++ freevars f)
 freevars (Abstraction x e) = freevars e \\ [x]
 
 -- substitute (x, a) b = b[a/x] = (λx.b) a
-substitute ∷ (Id, Expression) → Expression → Expression
+substitute :: (Id, Expression) -> Expression -> Expression
 substitute s (Application f a)
   = Application (substitute s f) (substitute s a)
 substitute (x, v) e@(Variable x')
@@ -122,14 +121,14 @@ substitute s@(x, v) (Abstraction y b)
       | x `elem` xs = freshvar (x <> "'") xs
       | otherwise   = x
 
-eqHelper ∷ (Expression, Expression) → Eval Expression → Eval Expression
+eqHelper :: (Expression, Expression) -> Eval Expression -> Eval Expression
 eqHelper (a, b) other
   = do inLambda <- asks snd
        if inLambda
           then other
           else alphaEq hybridApplicative a b
   where
-    alphaEq ∷ Eq a ⇒ (Expression → Eval a) → Expression → Expression → Eval a
+    alphaEq :: Eq a => (Expression -> Eval a) -> Expression -> Expression -> Eval a
     alphaEq interpreter a b
       = do a' <- interpreter a
            b' <- interpreter b
@@ -138,16 +137,16 @@ eqHelper (a, b) other
         true   = Abstraction "t" (Abstraction "f" (Variable "t"))
         false  = Abstraction "t" (Abstraction "f" (Variable "f"))
 
-etaReduce ∷ Expression → Expression
+etaReduce :: Expression -> Expression
 etaReduce e@(Abstraction x (Application f y))
   | Variable x == y && x `notElem` freevars f = f
   | otherwise = e
 etaReduce e   = e
 
-inLambda ∷ Eval a → Eval a
+inLambda :: Eval a -> Eval a
 inLambda = local $ second (const True)
 
-trace ∷ (Expression → Eval a) → Expression → Eval a
+trace :: (Expression -> Eval a) -> Expression -> Eval a
 trace r e = antecedent e *> r e >>= liftA2 (*>) consequent return
   where antecedent = tell . (:[]) . Antecedent
         consequent = tell . (:[]) . Consequent
@@ -155,7 +154,7 @@ trace r e = antecedent e *> r e >>= liftA2 (*>) consequent return
 --------------------------------------------------------------------------------
 
 -- Reduce to weak head normal form
-callByName ∷ Expression → Eval Expression
+callByName :: Expression -> Eval Expression
 callByName = bn
   where
     bn = trace bn'
@@ -168,7 +167,7 @@ callByName = bn
     app f a                 = pure $ Application f a
 
 -- Reduce to normal form
-normalOrder ∷ Expression → Eval Expression
+normalOrder :: Expression -> Eval Expression
 normalOrder = no
   where
     bn = callByName
@@ -182,7 +181,7 @@ normalOrder = no
     app f a                 = Application <$> no f <*> no a
 
 -- Reduce to weak normal form
-callByValue ∷ Expression → Eval Expression
+callByValue :: Expression -> Eval Expression
 callByValue = bv
   where
     bv = trace bv'
@@ -195,7 +194,7 @@ callByValue = bv
     app f a                 = pure $ Application f a
 
 -- Reduce to normal form
-applicativeOrder ∷ Expression → Eval Expression
+applicativeOrder :: Expression -> Eval Expression
 applicativeOrder = ao
   where
     ao = trace ao'
@@ -208,7 +207,7 @@ applicativeOrder = ao
     app f a                 = pure $ Application f a
 
 -- Reduce to normal form
-hybridApplicative ∷ Expression → Eval Expression
+hybridApplicative :: Expression -> Eval Expression
 hybridApplicative = ha
   where
     bv = callByValue
@@ -222,7 +221,7 @@ hybridApplicative = ha
     app f a                 = Application <$> ha f <*> pure a
 
 -- Reduce to head normal form
-headSpine ∷ Expression → Eval Expression
+headSpine :: Expression -> Eval Expression
 headSpine = he
   where
     he = trace he'
@@ -235,7 +234,7 @@ headSpine = he
     app f a                 = pure $ Application f a
 
 -- Reduce to normal form
-hybridNormal ∷ Expression → Eval Expression
+hybridNormal :: Expression -> Eval Expression
 hybridNormal = hn
   where
     he = headSpine

@@ -1,5 +1,3 @@
-{-# LANGUAGE UnicodeSyntax #-}
-
 module Lambad.Pretty
   ( renderText
   , renderString
@@ -9,11 +7,11 @@ module Lambad.Pretty
 import Data.Text hiding (reverse)
 import Text.PrettyPrint
 
-renderText ∷ Pretty a ⇒ a → Text
+renderText :: Pretty a => a -> Text
 renderText = pack . render . pretty
 
-renderString ∷ Pretty a ⇒ a → String
+renderString :: Pretty a => a -> String
 renderString = render . pretty
 
 class Pretty a where
-  pretty ∷ a → Doc
+  pretty :: a -> Doc

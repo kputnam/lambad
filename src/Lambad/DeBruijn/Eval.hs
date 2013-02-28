@@ -1,4 +1,3 @@
-{-# LANGUAGE UnicodeSyntax #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Lambad.DeBruijn.Eval
@@ -59,18 +58,18 @@ type Environment a
 type Eval a
   = ReaderT (Environment a, Bool) (ErrorT T.Text (WriterT [Step a] Identity)) a
 
-runEval ∷ Environment a → Eval a → (Either T.Text a, [Step a])
+runEval :: Environment a -> Eval a -> (Either T.Text a, [Step a])
 runEval env action
   = runIdentity $ runWriterT $ runErrorT $ runReaderT action (env, False)
 
-renderTrace ∷ Pretty a ⇒ [Step a] → T.Text
+renderTrace :: Pretty a => [Step a] -> T.Text
 renderTrace = T.unlines . map trace . indentTrace
   where
     trace (n, e)        = T.replicate n "  " <> step e
     step (Antecedent e) = ">> " <> renderText e
     step (Consequent e) = "=> " <> renderText e
 
-indentTrace ∷ [Step a] → [(Int, Step a)]
+indentTrace :: [Step a] -> [(Int, Step a)]
 indentTrace = reverse . walk' 0 []
   where
     walk' n r []                = r
@@ -79,13 +78,13 @@ indentTrace = reverse . walk' 0 []
 
 --------------------------------------------------------------------------------
 
-emptyEnv ∷ Environment a
+emptyEnv :: Environment a
 emptyEnv = M.empty
 
-extendEnv ∷ Id → a → Environment a → Environment a
+extendEnv :: Id -> a -> Environment a -> Environment a
 extendEnv = M.insert
 
-buildEnv ∷ (Expression → Eval a) → [Declaration] → Either T.Text (Environment a)
+buildEnv :: (Expression -> Eval a) -> [Declaration] -> Either T.Text (Environment a)
 buildEnv interpreter = be emptyEnv
   where
     be env [] = Right env
@@ -96,18 +95,18 @@ buildEnv interpreter = be emptyEnv
 
 --------------------------------------------------------------------------------
 
-appHelper ∷ Expression → Expression → Expression
+appHelper :: Expression -> Expression -> Expression
 appHelper arg body = shift (-1) $ substitute (0, shift 1 arg) body
   where
-    substitute ∷ (Int, Expression) → Expression → Expression
+    substitute :: (Int, Expression) -> Expression -> Expression
     substitute (n, v)
-      = mapTerm (\c m → if m == c + n then shift c v else BoundVariable m)
+      = mapTerm (\c m -> if m == c + n then shift c v else BoundVariable m)
 
-    shift ∷ Int → Expression → Expression
+    shift :: Int -> Expression -> Expression
     shift d
-      = mapTerm (\c m → BoundVariable $ if m >= c then m + d else m)
+      = mapTerm (\c m -> BoundVariable $ if m >= c then m + d else m)
 
-    mapTerm ∷ (Int → Int → Expression) → Expression → Expression
+    mapTerm :: (Int -> Int -> Expression) -> Expression -> Expression
     mapTerm f = walk 0
       where
         walk _ e@(FreeVariable _) = e
@@ -115,14 +114,14 @@ appHelper arg body = shift (-1) $ substitute (0, shift 1 arg) body
         walk c (Abstraction b)    = Abstraction $ walk (c + 1) b
         walk c (BoundVariable n') = f c n'
 
-eqHelper ∷ (Expression, Expression) → Eval Expression → Eval Expression
+eqHelper :: (Expression, Expression) -> Eval Expression -> Eval Expression
 eqHelper (a, b) other
   = do inLambda <- asks snd
        if inLambda
           then other
           else alphaEq hybridApplicative a b
   where
-    alphaEq ∷ Eq a ⇒ (Expression → Eval a) → Expression → Expression → Eval a
+    alphaEq :: Eq a => (Expression -> Eval a) -> Expression -> Expression -> Eval a
     alphaEq interpreter a b
       = do a' <- interpreter a
            b' <- interpreter b
@@ -131,7 +130,7 @@ eqHelper (a, b) other
         true   = Abstraction (Abstraction (BoundVariable 1))
         false  = Abstraction (Abstraction (BoundVariable 0))
 
-etaReduce ∷ Expression → Expression
+etaReduce :: Expression -> Expression
 etaReduce e@(Abstraction (Application f (BoundVariable 0)))
   = fromMaybe e (walk 0 f)
   where
@@ -143,10 +142,10 @@ etaReduce e@(Abstraction (Application f (BoundVariable 0)))
       | otherwise = Just (BoundVariable (m-1))
 etaReduce e = e
 
-inLambda ∷ Eval a → Eval a
+inLambda :: Eval a -> Eval a
 inLambda = local $ second (const True)
 
-trace ∷ (Expression → Eval a) → Expression → Eval a
+trace :: (Expression -> Eval a) -> Expression -> Eval a
 trace r e = antecedent e *> r e >>= liftA2 (*>) consequent return
   where antecedent = tell . (:[]) . Antecedent
         consequent = tell . (:[]) . Consequent
@@ -154,7 +153,7 @@ trace r e = antecedent e *> r e >>= liftA2 (*>) consequent return
 --------------------------------------------------------------------------------
 
 -- Reduce to weak head normal form
-callByName ∷ Expression → Eval Expression
+callByName :: Expression -> Eval Expression
 callByName = bn
   where
     bn = trace bn'
@@ -168,7 +167,7 @@ callByName = bn
     app f a                 = pure $ Application f a
 
 -- Reduce to normal form
-normalOrder ∷ Expression → Eval Expression
+normalOrder :: Expression -> Eval Expression
 normalOrder = no
   where
     bn = callByName
@@ -183,7 +182,7 @@ normalOrder = no
     app f a                 = Application <$> no f <*> no a
 
 -- Reduce to weak normal form
-callByValue ∷ Expression → Eval Expression
+callByValue :: Expression -> Eval Expression
 callByValue = bv
   where
     bv = trace bv'
@@ -197,7 +196,7 @@ callByValue = bv
     app f a                 = pure $ Application f a
 
 -- Reduce to normal form
-applicativeOrder ∷ Expression → Eval Expression
+applicativeOrder :: Expression -> Eval Expression
 applicativeOrder = ao
   where
     ao = trace ao'
@@ -211,7 +210,7 @@ applicativeOrder = ao
     app f a                 = pure $ Application f a
 
 -- Reduce to normal form
-hybridApplicative ∷ Expression → Eval Expression
+hybridApplicative :: Expression -> Eval Expression
 hybridApplicative = ha
   where
     bv = callByValue
@@ -226,7 +225,7 @@ hybridApplicative = ha
     app f a                 = Application <$> ha f <*> pure a
 
 -- Reduce to head normal form
-headSpine ∷ Expression → Eval Expression
+headSpine :: Expression -> Eval Expression
 headSpine = he
   where
     he = trace he'
@@ -240,7 +239,7 @@ headSpine = he
     app f a                 = pure $ Application f a
 
 -- Reduce to normal form
-hybridNormal ∷ Expression → Eval Expression
+hybridNormal :: Expression -> Eval Expression
 hybridNormal = hn
   where
     he = headSpine

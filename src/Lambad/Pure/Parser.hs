@@ -1,4 +1,3 @@
-{-# LANGUAGE UnicodeSyntax #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Lambad.Pure.Parser
@@ -14,12 +13,12 @@ import Control.Applicative hiding (empty)
 
 import Lambad.Pure.Syntax
 
-parseFile ∷ Parser [Declaration]
+parseFile :: Parser [Declaration]
 parseFile
   = many1 (skipSpace *> parseDecl) <* skipSpace
 
 -- declare name body
-parseDecl ∷ Parser Declaration
+parseDecl :: Parser Declaration
 parseDecl
   = decl
   where
@@ -29,7 +28,7 @@ parseDecl
     decl    = parenthesized decl
           <|> Declaration <$> (declare *> name) <*> body
 
-parseExpr ∷ Parser Expression
+parseExpr :: Parser Expression
 parseExpr
   = right =<< expr
   where
@@ -40,7 +39,7 @@ parseExpr
                      <|>  parenthesized parseExpr)
 
 -- lambda x. body
-parseAbs ∷ Parser Expression
+parseAbs :: Parser Expression
 parseAbs
   = lambda *> rest
   where
@@ -49,21 +48,21 @@ parseAbs
     lambda = ("lambda" .*> skipSpace1)
          <|> ("λ"      .*> skipSpace)
 
-parseVar ∷ Parser Expression
+parseVar :: Parser Expression
 parseVar
   = Variable <$> parseVarId
 
-parseVarId ∷ Parser Text
+parseVarId :: Parser Text
 parseVarId
   = takeWhile1 (`notElem` " .\r\n\t()")
 
 ---------------------------------------------------------------------------
 
-skipSpace1 ∷ Parser ()
+skipSpace1 :: Parser ()
 skipSpace1
   = takeWhile1 isSpace *> skipSpace
 
-parenthesized ∷ Parser a → Parser a
+parenthesized :: Parser a -> Parser a
 parenthesized p
   = open *> p <* close
   where

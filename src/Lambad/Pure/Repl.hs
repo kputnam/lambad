@@ -1,5 +1,4 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE UnicodeSyntax #-}
 
 module Lambad.Pure.Repl
   ( eval
@@ -19,10 +18,10 @@ import Lambad.Pure.Eval
 import Lambad.Pure.Parser
 import Lambad.Pure.Syntax
 
-eval ∷ Pretty a ⇒ (Expression → Eval a)
-                → Environment a
-                → T.Text
-                → (Either T.Text a, [Step a])
+eval :: Pretty a => (Expression -> Eval a)
+                -> Environment a
+                -> T.Text
+                -> (Either T.Text a, [Step a])
 eval interpreter environment code
   = case ast of
       Right e -> runEval environment (interpreter e)
@@ -33,17 +32,17 @@ eval interpreter environment code
             Done x _   -> Left x
             Fail x _ _ -> Left x
 
-evalPrint ∷ Pretty a ⇒ (Expression → Eval a)
-                     → Environment a
-                     → T.Text
-                     → IO (Either T.Text a)
+evalPrint :: Pretty a => (Expression -> Eval a)
+                     -> Environment a
+                     -> T.Text
+                     -> IO (Either T.Text a)
 evalPrint interpreter environment code
   = do putStr   $ T.unpack (renderTrace trace)
        putStrLn $ show (length trace `div` 2) ++ " steps\n"
        return val
   where (val, trace) = eval interpreter environment code
 
-evalEach ∷ T.Text → Environment Expression → IO ()
+evalEach :: T.Text -> Environment Expression -> IO ()
 evalEach code environment
   = sequence_ [ putStrLn $ name ++ " (" ++ show nsteps ++ "): " ++ pretty
               | (name, interpreter) <- es
@@ -52,7 +51,7 @@ evalEach code environment
               , let pretty = either (T.unpack . ("error: " <>)) renderString res
               ]
   where
-    es ∷ [(String, Expression → Eval Expression)]
+    es :: [(String, Expression -> Eval Expression)]
     es = [("ao", applicativeOrder)
          ,("no", normalOrder)
          ,("ha", hybridApplicative)
@@ -61,7 +60,7 @@ evalEach code environment
          ,("he", headSpine)
          ,("bn", callByName)]
 
-evalEnv ∷ (Expression → Eval a) → T.Text → Either T.Text (Environment a)
+evalEnv :: (Expression -> Eval a) -> T.Text -> Either T.Text (Environment a)
 evalEnv interpreter code
   = buildEnv interpreter =<< ast
   where

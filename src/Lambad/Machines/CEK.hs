@@ -1,5 +1,3 @@
-{-# LANGUAGE UnicodeSyntax #-}
-
 module Lambad.Machines.CEK
   ( eval
   ) where
@@ -34,7 +32,7 @@ data Frame
 type State
   = (Program, Environment, Frame)
 
-eval ∷ Program → Value
+eval :: Program -> Value
 eval
   = uncurry lift . two . fold . inject
   where
@@ -46,15 +44,15 @@ eval
            | otherwise = fold (step s)
 
 
-inject ∷ Program → State
+inject :: Program -> State
 inject e
   = (e, M.empty, Stop)
 
-lift ∷ Program → Environment → Value
+lift :: Program -> Environment -> Value
 lift (Abstraction x b)
   = Closure x b
 
-step ∷ State → State
+step :: State -> State
 
 -- Lookup references in the environment ρ
 step (Variable x, ρ, κ)
