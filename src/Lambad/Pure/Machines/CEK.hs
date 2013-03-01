@@ -1,4 +1,4 @@
-module Lambad.Machines.CEK
+module Lambad.Pure.Machines.CEK
   ( eval
   ) where
 
@@ -53,21 +53,17 @@ lift (Abstraction x b)
   = Closure x b
 
 step :: State -> State
-
--- Lookup references in the environment ρ
 step (Variable x, ρ, κ)
+  -- Lookup references in the environment ρ
   = unlift (fromJust $ M.lookup x ρ)
   where
     unlift (Closure x b ρ) = (Abstraction x b, ρ, κ)
-
--- For application, first evaluate the operator
 step (Application f a, ρ, κ)
+  -- For application, first evaluate the operator
   = (f, ρ, Operator a ρ κ)
-
--- We have an operator, next evaluate the operand
 step (Abstraction x b, ρ, Operator a ρ' κ)
+  -- We have an operator, next evaluate the operand
   = (a, ρ', Operand (Closure x b ρ) κ)
-
--- We have an operand, next evaluate operator body
 step (e, ρ, Operand (Closure x' b' ρ') κ)
+  -- We have an operand, next evaluate operator body
   = (b', M.insert x' (lift e ρ) ρ', κ)

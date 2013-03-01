@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Lambad.Machines.CEKGo
+module Lambad.Pure.Machines.CEKGo
   ( eval
   ) where
 
@@ -55,36 +55,29 @@ lift (Abstraction x b)
   = Closure x b
 
 step :: State -> State
-
--- Lookup references in the environment ρ
 step (Variable x, ρ, κ)
+  -- Lookup references in the environment ρ
   = unlift (fromJust $ M.lookup x ρ)
   where
     unlift (Closure x b ρ) = (Abstraction x b, ρ, κ)
-
--- Here pushes a marker onto the stack
 step (Application (Variable "here") e, ρ, κ)
+  -- Here pushes a marker onto the stack
   = (e, ρ, Mark κ)
-
--- Jump erases the stack up to the nearest marker
 step (Application (Variable "jump") e, ρ, κ)
+  -- Jump erases the stack up to the nearest marker
   = let find (Mark κ)         = κ
         find (Operand _ κ)    = find κ
         find (Operator _ _ κ) = find κ
      in (e, ρ, find κ)
-
--- For application, first evaluate the operator
 step (Application f a, ρ, κ)
+  -- For application, first evaluate the operator
   = (f, ρ, Operator a ρ κ)
-
--- We have an operator, next evaluate the operand
 step (Abstraction x b, ρ, Operator a ρ' κ)
+  -- We have an operator, next evaluate the operand
   = (a, ρ', Operand (Closure x b ρ) κ)
-
--- Remove the topmost marker, assuming e becomes a Value
 step (e, ρ, Mark κ)
+  -- Remove the topmost marker, assuming e becomes a Value
   = (e, ρ, κ)
-
--- We have an operand, next evaluate operator body
 step (e, ρ, Operand (Closure x' b' ρ') κ)
+  -- We have an operand, next evaluate operator body
   = (b', M.insert x' (lift e ρ) ρ', κ)

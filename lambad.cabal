@@ -50,11 +50,11 @@ library
     Lambad.Pure.Eval
     Lambad.Pure.Syntax
     Lambad.Pure.Parser
+    Lambad.Pure.Machines.CEK
+    Lambad.Pure.Machines.CEKGo
     Lambad.DeBruijn.Compile
     Lambad.DeBruijn.Eval
     Lambad.DeBruijn.Syntax
-    Lambad.Machines.CEK
-    Lambad.Machines.CEKGo
 
 -- test-suite main
 --   type: exitcode-stdio-1.0
