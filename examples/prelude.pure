@@ -14,8 +14,8 @@
   (lambda f x. f (lambda y. (x x) y))
   (lambda f x. f (lambda y. (x x) y)))
 
-(declare true     lambda t t. t)
-(declare false    lambda f f. f)
+(declare true     lambda t f. t)
+(declare false    lambda t f. f)
 (declare if       lambda p t f. p t f)
 (declare not      lambda p t f. p f t)
 (declare or       lambda p q. p p q)

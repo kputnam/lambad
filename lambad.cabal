@@ -52,6 +52,7 @@ library
     Lambad.Pure.Parser
     Lambad.Pure.Machines.CEK
     Lambad.Pure.Machines.CEKGo
+    Lambad.Pure.Compilers.JavaScript
     Lambad.DeBruijn.Compile
     Lambad.DeBruijn.Eval
     Lambad.DeBruijn.Syntax
