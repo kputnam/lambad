@@ -9,10 +9,9 @@ module Lambad.Pure.Repl
 
 import Data.Attoparsec.Text (parse, feed, skipSpace, IResult(..))
 import Data.Monoid
-import Control.Applicative ((<*), (<$>))
+import Control.Applicative ((<*))
 import qualified Data.Text as T
 
-import Lambad.Misc
 import Lambad.Pretty
 import Lambad.Pure.Eval
 import Lambad.Pure.Parser
@@ -64,7 +63,7 @@ evalEnv :: (Expression -> Eval a) -> T.Text -> Either T.Text (Environment a)
 evalEnv interpreter code
   = buildEnv interpreter =<< ast
   where
-    ast :: Either T.Text [Declaration]
+    ast :: Either T.Text [Definition]
     ast = case feed (parse (parseFile <* skipSpace) code) T.empty of
             Done "" e  -> Right e
             Done x _   -> Left x

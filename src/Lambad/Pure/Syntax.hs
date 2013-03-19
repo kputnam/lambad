@@ -2,7 +2,7 @@
 
 module Lambad.Pure.Syntax
   ( Expression(..)
-  , Declaration(..)
+  , Definition(..)
   ) where
 
 import Prelude    hiding (unwords)
@@ -20,12 +20,12 @@ data Expression
   | Abstraction Id Expression
   deriving (Show)
 
-data Declaration
-  = Declaration Id Expression
+data Definition
+  = Definition Id Expression
   deriving (Show)
 
-instance Pretty Declaration where
-  pretty (Declaration x e)
+instance Pretty Definition where
+  pretty (Definition x e)
     = parens $ text "define" <+> text (unpack x) <+> pretty e
 
 instance Pretty Expression where
@@ -53,14 +53,13 @@ instance Pretty Expression where
     = pretty f <+> pretty x
 
   pretty (Abstraction x e)
-    = text "λ" <> text (unpack (unwords xs))
-               <> text "." <+> pretty e'
+    = text "λ" <> text (unpack (unwords vars))
+               <> text "." <+> pretty (snd inner)
     where
-      xs    = reverse (fst inner)
-      e'    = snd inner
+      vars  = reverse (fst inner)
       inner = collapse ([x], e)
-      collapse (xs, Abstraction x e) = collapse (x:xs, e)
-      collapse (xs, e)               = (xs, e)
+      collapse (xs, Abstraction x' e') = collapse (x':xs, e')
+      collapse (xs, e')                = (xs, e')
 
   pretty (Variable x)
     = text (unpack x)

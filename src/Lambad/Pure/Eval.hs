@@ -77,7 +77,7 @@ renderTrace = T.unlines . map trace . indentTrace
 indentTrace :: [Step a] -> [(Int, Step a)]
 indentTrace = reverse . walk' 0 []
   where
-    walk' n r []                  = r
+    walk' _ r []                  = r
     walk' n r (Antecedent x:xs) = walk' (n + 1) ((n,     Antecedent x):r) xs
     walk' n r (Consequent x:xs) = walk' (n - 1) ((n - 1, Consequent x):r) xs
 
@@ -89,14 +89,14 @@ emptyEnv = M.empty
 extendEnv :: Id -> a -> Environment a -> Environment a
 extendEnv = M.insert
 
-buildEnv :: (Expression -> Eval a) -> [Declaration] -> Either T.Text (Environment a)
+buildEnv :: (Expression -> Eval a) -> [Definition] -> Either T.Text (Environment a)
 buildEnv interpreter = be emptyEnv
   where
     be env [] = Right env
-    be env (Declaration id expr:xs)
+    be env (Definition x expr:xs)
       = let (res, _) = runEval env (interpreter expr)
         in do val <- res
-              be (extendEnv id val env) xs
+              be (extendEnv x val env) xs
 
 freevars :: Expression -> [Id]
 freevars (Variable x)      = [x]
@@ -170,7 +170,6 @@ callByName = bn
 normalOrder :: Expression -> Eval Expression
 normalOrder = no
   where
-    bn = callByName
     no = trace no'
     no' e@(Variable x)      = M.findWithDefault e x <$> asks fst
     no' (Abstraction x b)   = inLambda $ etaReduce . Abstraction x <$> no b

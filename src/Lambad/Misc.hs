@@ -6,7 +6,6 @@ module Lambad.Misc
 
 import Control.Monad
 import Control.Monad.Instances ()
-import Data.Either (either)
 
 swap :: Either a b -> Either b a
 swap = either Right Left

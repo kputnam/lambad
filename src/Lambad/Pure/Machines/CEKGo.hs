@@ -42,7 +42,7 @@ eval
     final (Abstraction _ _, _, Stop) = True
     final _                          = False
 
-    two (a, b, c)      = (a, b)
+    two (a, b, _)      = (a, b)
     fold s | final s   = s
            | otherwise = fold (step s)
 

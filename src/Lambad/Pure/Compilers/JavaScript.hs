@@ -15,14 +15,14 @@ class ToJS a where
   toJS :: a -> Text
 
 instance ToJS Expression where
-  toJS (Variable id)     = mangle id
-  toJS (Application (Variable id) e)
-                         = mangle id <> "(" <> toJS e <> ")"
+  toJS (Variable x)      = mangle x
+  toJS (Application (Variable x) e)
+                         = mangle x <> "(" <> toJS e <> ")"
   toJS (Application f e) = "(" <> toJS f <> ")(" <> toJS e <> ")"
   toJS (Abstraction x e) = "function(" <> x <> ") { return " <> toJS e <> "; }"
 
-instance ToJS Declaration where
-  toJS (Declaration x e) = "var " <> mangle x <> " = " <> toJS e <> ";"
+instance ToJS Definition where
+  toJS (Definition x e) = "var " <> mangle x <> " = " <> toJS e <> ";"
 
 mangle :: Text -> Text
 mangle t = if isKeyword t
