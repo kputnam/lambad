@@ -2,11 +2,15 @@
 :m + Lambad.Pretty
 :m + Lambad.Misc
 
-:m + Lambad.Pure.Repl
-:m + Lambad.Pure.Eval
-:m + Lambad.Pure.Syntax
-:m + Lambad.Pure.Parser
-
 import Control.Applicative
-import qualified Lambad.DeBruijn.Compile  as C
-import qualified Lambad.DeBruijn.Eval     as D
+
+-- :m + Lambad.Pure.Repl
+-- :m + Lambad.Pure.Eval
+-- :m + Lambad.Pure.Syntax
+-- :m + Lambad.Pure.Parser
+
+-- import qualified Lambad.DeBruijn.Compile  as C
+-- import qualified Lambad.DeBruijn.Eval     as D
+
+:m + Lambad.SystemF.Parser
+:m + Lambad.SystemF.Syntax
