@@ -13,20 +13,20 @@ import Control.Applicative hiding (empty)
 
 import Lambad.Pure.Syntax
 
-parseFile :: Parser [Declaration]
+parseFile :: Parser [Definition]
 parseFile
   = many1 (skipSpace *> parseDecl) <* skipSpace
 
--- declare name body
-parseDecl :: Parser Declaration
+-- define name body
+parseDecl :: Parser Definition
 parseDecl
-  = decl
+  = defn
   where
-    declare = "declare"  .*> skipSpace1
-    name    = parseVarId <*  skipSpace1
+    define  = "define"  .*> skipSpace1
+    name    = parseVarId <* skipSpace1
     body    = parseExpr
-    decl    = parenthesized decl
-          <|> Declaration <$> (declare *> name) <*> body
+    defn    = parenthesized defn
+          <|> Definition <$> (define *> name) <*> body
 
 parseExpr :: Parser Expression
 parseExpr
