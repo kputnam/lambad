@@ -45,10 +45,10 @@ parseType
 -- ∀α.τ
 parseForall :: Parser Type
 parseForall
-  = TyForall <$> (quant *> parseTyVarId) <*> inside
+  = TyForall <$> (delim *> parseTyVarId) <*> inside
   where
     inside = skipSpace *> ("." .*> skipSpace *> parseType)
-    quant  = ("forall" .*> skipSpace1)
+    delim  = ("forall" .*> skipSpace1)
          <|> ("∀"      .*> skipSpace)
 
 -- α
@@ -79,12 +79,12 @@ parseTerm
 -- λx:τ.e
 parseTmAbs :: Parser Term
 parseTmAbs
-  = lambda *> rest
+  = delim *> rest
   where
     rest    = TmAbstraction <$> parseTmVarId <*> argType <*> inside
     argType = skipSpace *> (":" .*> skipSpace *> parseType)
     inside  = skipSpace *> ("." .*> parseTerm <|> rest)
-    lambda  = ("lambda" .*> skipSpace1)
+    delim   = ("lambda" .*> skipSpace1)
           <|> ("λ"      .*> skipSpace)
 
 -- Λα.e
