@@ -22,21 +22,23 @@ module Lambad.SystemF.Eval
 import qualified Data.Map  as M
 import qualified Data.Text as T
 
-import Data.Monoid
 import Data.List            ((\\), nub)
+import Control.Arrow        (second)
+import Control.Applicative
+import Control.Monad.Reader
+import Control.Monad.Writer
 
+import Lambad.Eval
+import Lambad.Misc
 import Lambad.SystemF.Syntax
 
 type Id
   = T.Text
 
-data Step a
-  = Antecedent Term
-  | Consequent a
-  deriving (Eq, Show)
-
-type Environment a
-  = M.Map Id a
+trace :: (Term -> Eval Term) -> Term -> Eval Term
+trace r e = antecedent e *> r e >>= liftA2 (*>) consequent return
+  where antecedent = tell . (:[]) . Antecedent
+        consequent = tell . (:[]) . Consequent
 
 -- Lift universal quantification towards the root
 normalize :: Type -> Type
@@ -45,7 +47,7 @@ normalize (TyArrow i (TyForall a o))  = TyForall a (normalize (TyArrow i o))
 normalize (TyArrow i o)               = TyArrow (normalize i) (normalize o)
 normalize (TyForall a t)              = TyForall a (normalize t)
 
--- α-Equivalence
+-- α-Equivalence on types
 instance Eq Type where
   TyVariable a == TyVariable a'
     = a == a'
@@ -55,7 +57,7 @@ instance Eq Type where
     = normalize t == normalize (substitute (a', TyVariable a) t')
   _ == _ = False
 
--- α-Equivalence
+-- α-Equivalence on terms
 instance Eq Term where
   TmVariable x == TmVariable y
     = x == y
@@ -157,3 +159,130 @@ instance Substitute Term Type where
       free = getFree (freevars v :: Free Type)
       b'   = freshvar b free
       e'   = substitute (b, TyVariable b') e
+
+--
+--------------------------------------------------------------------------------
+
+-- Evaluate two expressions and test alpha-equivalence
+eqHelper :: (Term, Term) -> Eval Term -> Eval Term
+eqHelper (a, b) other
+  = do inLambda <- asks snd
+       if inLambda
+          then other
+          else alphaEq hybridApplicative a b
+  where
+    alphaEq :: Eq a => (Term -> Eval a) -> Term -> Term -> Eval a
+    alphaEq interpreter a b
+      = do a' <- interpreter a
+           b' <- interpreter b
+           interpreter (if a' == b' then true else false)
+      where
+        true   = undefined -- TmAbstraction "t" (TmAbstraction "f" (TmVariable "t"))
+        false  = undefined -- TmAbstraction "t" (TmAbstraction "f" (TmVariable "f"))
+
+-- Reduce (λx:τ. f x) to f
+etaReduce :: Term -> Term
+etaReduce e@(TmAbstraction x _ (TmApplication f y))
+  | TmVariable x == y && x `notElem` getFree (freevars f :: Free Term) = f
+  | otherwise = e
+etaReduce e   = e
+
+-- Indicate we're "evaluating under lambda" when evaluating the given argument
+inLambda :: Eval a -> Eval a
+inLambda = local $ second (const True)
+
+--
+--------------------------------------------------------------------------------
+
+-- Reduce to weak head normal form
+callByName :: Term -> Eval Term
+callByName = bn
+  where
+    bn = trace bn'
+    bn' e@(TmVariable x)        = M.findWithDefault e x <$> asks fst
+    bn' e@(TmAbstraction _ _ _) = pure (etaReduce e)
+    bn' (TmApplication f a)     = applyM2 app (bn f) (pure a)
+    app (TmAbstraction x _ b) a = bn $ substitute (x, a) b
+    app f@(TmApplication (TmVariable "=") a) b
+                                = eqHelper (a, b) (pure $ TmApplication f b)
+    app f a                     = pure $ TmApplication f a
+
+-- Reduce to normal form
+normalOrder :: Term -> Eval Term
+normalOrder = no
+  where
+    no = trace no'
+    no' e@(TmVariable x)        = M.findWithDefault e x <$> asks fst
+    no' (TmAbstraction x t b)   = inLambda $ etaReduce . TmAbstraction x t <$> no b
+    no' (TmApplication f a)     = applyM2 app (no f) (pure a)
+    app (TmAbstraction x _ b) a = no $ substitute (x, a) b
+    app f@(TmApplication (TmVariable "=") a) b
+                                = eqHelper (a, b) (TmApplication <$> no f <*> no b)
+    app f a                     = TmApplication <$> no f <*> no a
+
+-- Reduce to weak normal form
+callByValue :: Term -> Eval Term
+callByValue = bv
+  where
+    bv = trace bv'
+    bv' e@(TmVariable x)        = M.findWithDefault e x <$> asks fst
+    bv' e@(TmAbstraction _ _ _) = pure (etaReduce e)
+    bv' (TmApplication f a)     = applyM2 app (bv f) (bv a)
+    app (TmAbstraction x _ b) a = bv $ substitute (x, a) b
+    app f@(TmApplication (TmVariable "=") a) b
+                                = eqHelper (a, b) (pure $ TmApplication f b)
+    app f a                     = pure $ TmApplication f a
+
+-- Reduce to normal form
+applicativeOrder :: Term -> Eval Term
+applicativeOrder = ao
+  where
+    ao = trace ao'
+    ao' e@(TmVariable x)        = M.findWithDefault e x <$> asks fst
+    ao' (TmAbstraction x t b)   = inLambda $ etaReduce . TmAbstraction x t <$> ao b
+    ao' (TmApplication f a)     = applyM2 app (ao f) (ao a)
+    app (TmAbstraction x _ b) a = ao $ substitute (x, a) b
+    app f@(TmApplication (TmVariable "=") a) b
+                                = eqHelper (a, b) (pure $ TmApplication f b)
+    app f a                     = pure $ TmApplication f a
+
+-- Reduce to normal form
+hybridApplicative :: Term -> Eval Term
+hybridApplicative = ha
+  where
+    bv = callByValue
+    ha = trace ha'
+    ha' e@(TmVariable x)        = M.findWithDefault e x <$> asks fst
+    ha' (TmAbstraction x t b)   = inLambda $ etaReduce . TmAbstraction x t <$> ha b
+    ha' (TmApplication f a)     = applyM2 app (bv f) (ha a)
+    app (TmAbstraction x _ b) a = ha $ substitute (x, a) b
+    app f@(TmApplication (TmVariable "=") a) b
+                                = eqHelper (a, b) (TmApplication <$> ha f <*> pure b)
+    app f a                     = TmApplication <$> ha f <*> pure a
+
+-- Reduce to head normal form
+headSpine :: Term -> Eval Term
+headSpine = he
+  where
+    he = trace he'
+    he' e@(TmVariable x)        = M.findWithDefault e x <$> asks fst
+    he' (TmAbstraction x t b)   = inLambda $ etaReduce . TmAbstraction x t <$> he b
+    he' (TmApplication f a)     = applyM2 app (he f) (pure a)
+    app (TmAbstraction x _ b) a = he $ substitute (x, a) b
+    app f@(TmApplication (TmVariable "=") a) b
+                                = eqHelper (a, b) (pure $ TmApplication f b)
+    app f a                     = pure $ TmApplication f a
+
+-- Reduce to normal form
+hybridNormal :: Term -> Eval Term
+hybridNormal = hn
+  where
+    he = headSpine
+    hn = trace hn'
+    hn' e@(TmVariable x)        = M.findWithDefault e x <$> asks fst
+    hn' (TmAbstraction x t b)   = inLambda $ etaReduce . TmAbstraction x t <$> hn b
+    hn' (TmApplication f a)     = applyM2 app (he f) (pure a)
+    app (TmAbstraction x _ b) a = hn $ substitute (x, a) b
+    app f@(TmApplication (TmVariable "=") a) b
+                                = eqHelper (a, b) (TmApplication <$> hn f <*> hn b)
+    app f a                     = TmApplication <$> hn f <*> hn a
