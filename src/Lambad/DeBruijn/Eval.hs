@@ -13,7 +13,7 @@ module Lambad.DeBruijn.Eval
   , headSpine
   , hybridNormal
   , renderTrace
-  , Eval(..)
+  , Eval
   , Step(..)
   , Environment
   ) where
@@ -25,88 +25,46 @@ import Control.Arrow (second)
 import Control.Applicative
 import Data.Maybe
 
-import Control.Monad.Identity
 import Control.Monad.Reader
 import Control.Monad.Writer
-import Control.Monad.Error
 
+import Lambad.Eval
 import Lambad.Misc
-import Lambad.Pretty
 import Lambad.DeBruijn.Syntax
 
--- import Language.DeBruijn.Misc
--- import Language.DeBruijn.Syntax
--- import Language.DeBruijn.Pretty
-
-instance Error T.Text where
-  noMsg   = ""
-  strMsg  = T.pack
-
-type Id
-  = T.Text
-
-data Step a
-  = Antecedent Expression
-  | Consequent a
-  deriving (Eq, Show)
-
-type Environment a
-  = M.Map Id a
-
+--
 --------------------------------------------------------------------------------
 
-type Eval a
-  = ReaderT (Environment a, Bool) (ErrorT T.Text (WriterT [Step a] Identity)) a
-
-runEval :: Environment a -> Eval a -> (Either T.Text a, [Step a])
-runEval env action
-  = runIdentity $ runWriterT $ runErrorT $ runReaderT action (env, False)
-
-renderTrace :: Pretty a => [Step a] -> T.Text
-renderTrace = T.unlines . map trace . indentTrace
-  where
-    trace (n, e)        = T.replicate n "  " <> step e
-    step (Antecedent e) = ">> " <> renderText e
-    step (Consequent e) = "=> " <> renderText e
-
-indentTrace :: [Step a] -> [(Int, Step a)]
-indentTrace = reverse . walk' 0 []
-  where
-    walk' n r []                = r
-    walk' n r (Antecedent x:xs) = walk' (n + 1) ((n,     Antecedent x):r) xs
-    walk' n r (Consequent x:xs) = walk' (n - 1) ((n - 1, Consequent x):r) xs
-
---------------------------------------------------------------------------------
-
-emptyEnv :: Environment a
-emptyEnv = M.empty
-
-extendEnv :: Id -> a -> Environment a -> Environment a
-extendEnv = M.insert
-
-buildEnv :: (Expression -> Eval a) -> [Declaration] -> Either T.Text (Environment a)
+buildEnv :: (Term -> Eval a) -> [Declaration] -> Either T.Text (Environment a)
 buildEnv interpreter = be emptyEnv
   where
     be env [] = Right env
-    be env (Declaration id expr:xs)
+    be env (Declaration x expr:xs)
       = let (res, _) = runEval env (interpreter expr)
         in do val <- res
-              be (extendEnv id val env) xs
+              be (extendEnv x val env) xs
 
+
+trace :: (Term -> Eval Term) -> Term -> Eval Term
+trace r e = antecedent e *> r e >>= liftA2 (*>) consequent return
+  where antecedent = tell . (:[]) . Antecedent
+        consequent = tell . (:[]) . Consequent
+
+--
 --------------------------------------------------------------------------------
 
-appHelper :: Expression -> Expression -> Expression
+appHelper :: Term -> Term -> Term
 appHelper arg body = shift (-1) $ substitute (0, shift 1 arg) body
   where
-    substitute :: (Int, Expression) -> Expression -> Expression
+    substitute :: (Int, Term) -> Term -> Term
     substitute (n, v)
       = mapTerm (\c m -> if m == c + n then shift c v else BoundVariable m)
 
-    shift :: Int -> Expression -> Expression
+    shift :: Int -> Term -> Term
     shift d
       = mapTerm (\c m -> BoundVariable $ if m >= c then m + d else m)
 
-    mapTerm :: (Int -> Int -> Expression) -> Expression -> Expression
+    mapTerm :: (Int -> Int -> Term) -> Term -> Term
     mapTerm f = walk 0
       where
         walk _ e@(FreeVariable _) = e
@@ -114,14 +72,15 @@ appHelper arg body = shift (-1) $ substitute (0, shift 1 arg) body
         walk c (Abstraction b)    = Abstraction $ walk (c + 1) b
         walk c (BoundVariable n') = f c n'
 
-eqHelper :: (Expression, Expression) -> Eval Expression -> Eval Expression
+-- Evaluate two expressions and test equivalence
+eqHelper :: (Term, Term) -> Eval Term -> Eval Term
 eqHelper (a, b) other
   = do inLambda <- asks snd
        if inLambda
           then other
           else alphaEq hybridApplicative a b
   where
-    alphaEq :: Eq a => (Expression -> Eval a) -> Expression -> Expression -> Eval a
+    alphaEq :: Eq a => (Term -> Eval a) -> Term -> Term -> Eval a
     alphaEq interpreter a b
       = do a' <- interpreter a
            b' <- interpreter b
@@ -130,7 +89,8 @@ eqHelper (a, b) other
         true   = Abstraction (Abstraction (BoundVariable 1))
         false  = Abstraction (Abstraction (BoundVariable 0))
 
-etaReduce :: Expression -> Expression
+-- Reduce (λx. f x) to f
+etaReduce :: Term -> Term
 etaReduce e@(Abstraction (Application f (BoundVariable 0)))
   = fromMaybe e (walk 0 f)
   where
@@ -142,18 +102,15 @@ etaReduce e@(Abstraction (Application f (BoundVariable 0)))
       | otherwise = Just (BoundVariable (m-1))
 etaReduce e = e
 
+-- Indicate we're "evaluating under lambda" when evaluating the given argument
 inLambda :: Eval a -> Eval a
 inLambda = local $ second (const True)
 
-trace :: (Expression -> Eval a) -> Expression -> Eval a
-trace r e = antecedent e *> r e >>= liftA2 (*>) consequent return
-  where antecedent = tell . (:[]) . Antecedent
-        consequent = tell . (:[]) . Consequent
-
+--
 --------------------------------------------------------------------------------
 
 -- Reduce to weak head normal form
-callByName :: Expression -> Eval Expression
+callByName :: Term -> Eval Term
 callByName = bn
   where
     bn = trace bn'
@@ -167,10 +124,9 @@ callByName = bn
     app f a                 = pure $ Application f a
 
 -- Reduce to normal form
-normalOrder :: Expression -> Eval Expression
+normalOrder :: Term -> Eval Term
 normalOrder = no
   where
-    bn = callByName
     no = trace no'
     no' e@(BoundVariable _) = pure e
     no' e@(FreeVariable x)  = M.findWithDefault e x <$> asks fst
@@ -182,7 +138,7 @@ normalOrder = no
     app f a                 = Application <$> no f <*> no a
 
 -- Reduce to weak normal form
-callByValue :: Expression -> Eval Expression
+callByValue :: Term -> Eval Term
 callByValue = bv
   where
     bv = trace bv'
@@ -196,7 +152,7 @@ callByValue = bv
     app f a                 = pure $ Application f a
 
 -- Reduce to normal form
-applicativeOrder :: Expression -> Eval Expression
+applicativeOrder :: Term -> Eval Term
 applicativeOrder = ao
   where
     ao = trace ao'
@@ -210,7 +166,7 @@ applicativeOrder = ao
     app f a                 = pure $ Application f a
 
 -- Reduce to normal form
-hybridApplicative :: Expression -> Eval Expression
+hybridApplicative :: Term -> Eval Term
 hybridApplicative = ha
   where
     bv = callByValue
@@ -225,7 +181,7 @@ hybridApplicative = ha
     app f a                 = Application <$> ha f <*> pure a
 
 -- Reduce to head normal form
-headSpine :: Expression -> Eval Expression
+headSpine :: Term -> Eval Term
 headSpine = he
   where
     he = trace he'
@@ -239,7 +195,7 @@ headSpine = he
     app f a                 = pure $ Application f a
 
 -- Reduce to normal form
-hybridNormal :: Expression -> Eval Expression
+hybridNormal :: Term -> Eval Term
 hybridNormal = hn
   where
     he = headSpine

@@ -14,7 +14,7 @@ import Lambad.Pure.Syntax
 class ToJS a where
   toJS :: a -> Text
 
-instance ToJS Expression where
+instance ToJS Term where
   toJS (Variable x)      = mangle x
   toJS (Application (Variable x) e)
                          = mangle x <> "(" <> toJS e <> ")"

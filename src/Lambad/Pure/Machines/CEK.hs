@@ -12,7 +12,7 @@ type Id
   = Text
 
 type Program
-  = Expression
+  = Term
 
 -- C: Control
 data Value

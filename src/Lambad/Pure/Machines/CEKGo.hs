@@ -19,7 +19,7 @@ data Value
 
 -- C: Control
 type Program
-  = Expression
+  = Term
 
 -- E: Environment
 type Environment

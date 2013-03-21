@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Lambad.Pure.Parser
-  ( parseExpr
+  ( parseTerm
   , parseFile
   , parseDecl
   ) where
@@ -24,31 +24,31 @@ parseDecl
   where
     define  = "define"  .*> skipSpace1
     name    = parseVarId <* skipSpace1
-    body    = parseExpr
+    body    = parseTerm
     defn    = parenthesized defn
           <|> Definition <$> (define *> name) <*> body
 
-parseExpr :: Parser Expression
-parseExpr
+parseTerm :: Parser Term
+parseTerm
   = right =<< expr
   where
     right = liftA2 (<|>) app pure
     app f = right =<< Application f <$> expr
     expr  = skipSpace *> (parseAbs
                      <|>  parseVar
-                     <|>  parenthesized parseExpr)
+                     <|>  parenthesized parseTerm)
 
 -- lambda x. body
-parseAbs :: Parser Expression
+parseAbs :: Parser Term
 parseAbs
   = lambda *> rest
   where
     rest   = Abstraction <$> parseVarId <*> (skipSpace *> (body <|> rest))
-    body   = "." .*> parseExpr
+    body   = "." .*> parseTerm
     lambda = ("lambda" .*> skipSpace1)
          <|> ("λ"      .*> skipSpace)
 
-parseVar :: Parser Expression
+parseVar :: Parser Term
 parseVar
   = Variable <$> parseVarId
 

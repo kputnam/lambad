@@ -14,7 +14,7 @@ import qualified Lambad.DeBruijn.Syntax as D
 alphabet :: [Text]
 alphabet = T.chunksOf 1 "abcdefghijklmnopqrstuvwxyz"
 
-toPure :: D.Expression -> P.Expression
+toPure :: D.Term -> P.Term
 toPure = walk []
   where
     walk xs (D.FreeVariable x)   = P.Variable x
@@ -27,7 +27,7 @@ toPure = walk []
           x = alphabet !! q <> T.replicate r "'"
        in P.Abstraction x $ walk (x:xs) b
 
-fromPure :: P.Expression -> D.Expression
+fromPure :: P.Term -> D.Term
 fromPure = walk []
   where
     walk xs (P.Application f a)  = D.Application (walk xs f) (walk xs a)

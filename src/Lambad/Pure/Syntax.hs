@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Lambad.Pure.Syntax
-  ( Expression(..)
+  ( Term(..)
   , Definition(..)
   ) where
 
@@ -14,21 +14,21 @@ import Lambad.Pretty
 type Id
   = Text
 
-data Expression
+data Term
   = Variable Id
-  | Application Expression Expression
-  | Abstraction Id Expression
+  | Application Term Term
+  | Abstraction Id Term
   deriving (Show)
 
 data Definition
-  = Definition Id Expression
+  = Definition Id Term
   deriving (Show)
 
 instance Pretty Definition where
   pretty (Definition x e)
     = parens $ text "define" <+> text (unpack x) <+> pretty e
 
-instance Pretty Expression where
+instance Pretty Term where
   -- Render (λx.x) (λx.x) instead of λx.x λx.x,
   pretty (Application f@(Abstraction _ _) x@(Abstraction _ _))
     = parens (pretty f) <+> parens (pretty x)

@@ -9,7 +9,8 @@ import Lambad.Pure.Syntax
 import Control.Monad.State
 import Data.Text (Text, pack)
 
-type Id = Text
+type Id
+  = Text
 
 cpsDecl :: Definition -> State Int Definition
 cpsDecl (Definition x e@(Variable _))
@@ -24,7 +25,7 @@ cpsDecl (Definition x e@(Abstraction _ _))
 withFresh :: (Id -> State Int b) -> State Int b
 withFresh f = modify (+ 1) >> (get >>= f . pack . ("k" ++) . show)
 
-cpsExpr :: Expression -> Expression -> State Int Expression
+cpsExpr :: Term -> Term -> State Int Term
 cpsExpr k (Variable x)
   = return $ Application k (Variable x)
 cpsExpr k (Abstraction x e)
