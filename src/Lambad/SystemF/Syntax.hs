@@ -8,7 +8,8 @@ module Lambad.SystemF.Syntax
 
 import Prelude    hiding (unwords)
 import Data.Text  hiding (reverse)
-import Text.PrettyPrint
+import Text.PrettyPrint hiding ((<>))
+import Data.Monoid ((<>))
 
 import Lambad.Pretty
 
@@ -24,7 +25,7 @@ data Type                       -- τ ::=
 data Term                       -- e ::=
   = TmVariable Id               --     | x
   | TmApplication Term Term     --     | e e
-  | TmAbstraction Id Type Term  --     | λx:τ
+  | TmAbstraction Id Type Term  --     | λx:τ.e
   | TyApplication Term Type     --     | e [τ]
   | TyAbstraction Id Term       --     | Λα.e
   deriving (Show)
@@ -38,14 +39,27 @@ instance Pretty Definition where
     = parens $ text "define" <+> text (unpack x) <+> pretty e
 
 instance Pretty Type where
-  pretty (TyVariable a) = undefined
-  pretty (TyForall a t) = undefined
-  pretty (TyArrow t t') = undefined
+  pretty (TyVariable a) = text (unpack a)
+  pretty (TyForall a t) = text (unpack ("∀" <> a <> ".")) <+> pretty t
+  pretty (TyArrow i o)  = pretty i <+> text "→" <+> pretty o
 
 instance Pretty Term where
-  pretty (TmVariable x)        = undefined
-  pretty (TmApplication f a)   = undefined
-  pretty (TmAbstraction x t e) = undefined
-  pretty (TyApplication f t)   = undefined
-  pretty (TyAbstraction a e)   = undefined
+  pretty (TmVariable x)        = text (unpack x)
+  pretty (TmApplication f a)   = parens (pretty f) <+> parens (pretty a)
+  pretty (TyApplication f t)   = parens (pretty f) <+> brackets (pretty t)
 
+  pretty e@(TmAbstraction _ _ _)
+    = text "λ" <> collapse e ""
+    where
+      collapse (TmAbstraction x t b) s
+                   = text (unpack (s <> x <> ":")) <> pretty t <> collapse b " "
+      collapse b _ = text "." <+> pretty b
+
+  pretty (TyAbstraction a e)
+    = text "Λ" <> text (unpack (unwords vars))
+               <> (text "." <+> pretty (snd inner))
+    where
+      vars  = reverse (fst inner)
+      inner = collapse ([a], e)
+      collapse (as, TyAbstraction a' e') = collapse (a':as, e')
+      collapse (as, e')                  = (as, e')

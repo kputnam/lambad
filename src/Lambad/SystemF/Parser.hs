@@ -58,7 +58,7 @@ parseTyVar
 
 parseTyVarId :: Parser Text
 parseTyVarId
-  = takeWhile1 (`notElem` " .-→\r\n\t([])")
+  = takeWhile1 (`notElem` " Λλ.-→\r\n\t([])")
 
 -- Terms (e)
 --------------------------------------------------------------------------------
@@ -104,7 +104,7 @@ parseTmVar
 
 parseTmVarId :: Parser Text
 parseTmVarId
-  = takeWhile1 (`notElem` " :\r\n\t([])")
+  = takeWhile1 (`notElem` " Λλ:\r\n\t([])")
 
 ---------------------------------------------------------------------------
 

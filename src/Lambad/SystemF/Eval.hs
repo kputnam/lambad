@@ -2,9 +2,8 @@
              MultiParamTypeClasses #-}
 
 module Lambad.SystemF.Eval
-{-( emptyEnv
+  ( emptyEnv
   , buildEnv
-  , extendEnv
   , runEval
   , callByName
   , normalOrder
@@ -14,10 +13,10 @@ module Lambad.SystemF.Eval
   , headSpine
   , hybridNormal
   , renderTrace
-  , Eval(..)
+  , Eval
   , Step(..)
   , Environment
-  )-} where
+  ) where
 
 import qualified Data.Map  as M
 import qualified Data.Text as T
@@ -39,6 +38,15 @@ trace :: (Term -> Eval Term) -> Term -> Eval Term
 trace r e = antecedent e *> r e >>= liftA2 (*>) consequent return
   where antecedent = tell . (:[]) . Antecedent
         consequent = tell . (:[]) . Consequent
+
+buildEnv :: (Term -> Eval a) -> [Definition] -> Either T.Text (Environment a)
+buildEnv interpreter = be emptyEnv
+  where
+    be env [] = Right env
+    be env (Definition x expr:xs)
+      = let (res, _) = runEval env (interpreter expr)
+        in do val <- res
+              be (extendEnv x val env) xs
 
 -- Lift universal quantification towards the root
 normalize :: Type -> Type
@@ -180,10 +188,13 @@ eqHelper (a, b) other
         true   = undefined -- TmAbstraction "t" (TmAbstraction "f" (TmVariable "t"))
         false  = undefined -- TmAbstraction "t" (TmAbstraction "f" (TmVariable "f"))
 
--- Reduce (λx:τ. f x) to f
+-- Reduce (λx:τ. f x) to f and (Λα.e α) to e
 etaReduce :: Term -> Term
 etaReduce e@(TmAbstraction x _ (TmApplication f y))
   | TmVariable x == y && x `notElem` getFree (freevars f :: Free Term) = f
+  | otherwise = e
+etaReduce e@(TyAbstraction a (TyApplication f t))
+  | TyVariable a == t && a `notElem` getFree (freevars e :: Free Type) = f
   | otherwise = e
 etaReduce e   = e
 
@@ -200,8 +211,14 @@ callByName = bn
   where
     bn = trace bn'
     bn' e@(TmVariable x)        = M.findWithDefault e x <$> asks fst
+    bn' e@(TyAbstraction _ _)   = pure (etaReduce e)
     bn' e@(TmAbstraction _ _ _) = pure (etaReduce e)
     bn' (TmApplication f a)     = applyM2 app (bn f) (pure a)
+    bn' (TyApplication e t)     = applyM2 apt (bn e) (pure t)
+
+    apt (TyAbstraction a e) t   = bn $ substitute (a, t) e
+    apt e t                     = pure $ TyApplication e t
+
     app (TmAbstraction x _ b) a = bn $ substitute (x, a) b
     app f@(TmApplication (TmVariable "=") a) b
                                 = eqHelper (a, b) (pure $ TmApplication f b)
@@ -213,8 +230,14 @@ normalOrder = no
   where
     no = trace no'
     no' e@(TmVariable x)        = M.findWithDefault e x <$> asks fst
+    no' (TyAbstraction a e)     = inLambda $ etaReduce . TyAbstraction a <$> no e
     no' (TmAbstraction x t b)   = inLambda $ etaReduce . TmAbstraction x t <$> no b
     no' (TmApplication f a)     = applyM2 app (no f) (pure a)
+    no' (TyApplication e t)     = applyM2 apt (no e) (pure t)
+
+    apt (TyAbstraction a e) t   = no $ substitute (a, t) e
+    apt e t                     = pure $ TyApplication e t
+
     app (TmAbstraction x _ b) a = no $ substitute (x, a) b
     app f@(TmApplication (TmVariable "=") a) b
                                 = eqHelper (a, b) (TmApplication <$> no f <*> no b)
@@ -226,8 +249,14 @@ callByValue = bv
   where
     bv = trace bv'
     bv' e@(TmVariable x)        = M.findWithDefault e x <$> asks fst
+    bv' e@(TyAbstraction _ _)   = pure (etaReduce e)
     bv' e@(TmAbstraction _ _ _) = pure (etaReduce e)
     bv' (TmApplication f a)     = applyM2 app (bv f) (bv a)
+    bv' (TyApplication e t)     = applyM2 apt (bv e) (pure t)
+
+    apt (TyAbstraction a e) t   = bv $ substitute (a, t) e
+    apt e t                     = pure $ TyApplication e t
+
     app (TmAbstraction x _ b) a = bv $ substitute (x, a) b
     app f@(TmApplication (TmVariable "=") a) b
                                 = eqHelper (a, b) (pure $ TmApplication f b)
@@ -239,8 +268,14 @@ applicativeOrder = ao
   where
     ao = trace ao'
     ao' e@(TmVariable x)        = M.findWithDefault e x <$> asks fst
+    ao' (TyAbstraction a e)     = inLambda $ etaReduce . TyAbstraction a <$> ao e
     ao' (TmAbstraction x t b)   = inLambda $ etaReduce . TmAbstraction x t <$> ao b
     ao' (TmApplication f a)     = applyM2 app (ao f) (ao a)
+    ao' (TyApplication e t)     = applyM2 apt (ao e) (pure t)
+
+    apt (TyAbstraction a e) t   = ao $ substitute (a, t) e
+    apt e t                     = pure $ TyApplication e t
+
     app (TmAbstraction x _ b) a = ao $ substitute (x, a) b
     app f@(TmApplication (TmVariable "=") a) b
                                 = eqHelper (a, b) (pure $ TmApplication f b)
@@ -253,8 +288,14 @@ hybridApplicative = ha
     bv = callByValue
     ha = trace ha'
     ha' e@(TmVariable x)        = M.findWithDefault e x <$> asks fst
+    ha' (TyAbstraction a e)     = inLambda $ etaReduce . TyAbstraction a <$> ha e
     ha' (TmAbstraction x t b)   = inLambda $ etaReduce . TmAbstraction x t <$> ha b
     ha' (TmApplication f a)     = applyM2 app (bv f) (ha a)
+    ha' (TyApplication e t)     = applyM2 apt (bv e) (pure t)
+
+    apt (TyAbstraction a e) t   = ha $ substitute (a, t) e
+    apt e t                     = pure $ TyApplication e t
+
     app (TmAbstraction x _ b) a = ha $ substitute (x, a) b
     app f@(TmApplication (TmVariable "=") a) b
                                 = eqHelper (a, b) (TmApplication <$> ha f <*> pure b)
@@ -266,8 +307,14 @@ headSpine = he
   where
     he = trace he'
     he' e@(TmVariable x)        = M.findWithDefault e x <$> asks fst
+    he' (TyAbstraction a e)     = inLambda $ etaReduce . TyAbstraction a <$> he e
     he' (TmAbstraction x t b)   = inLambda $ etaReduce . TmAbstraction x t <$> he b
     he' (TmApplication f a)     = applyM2 app (he f) (pure a)
+    he' (TyApplication e t)     = applyM2 apt (he e) (pure t)
+
+    apt (TyAbstraction a e) t   = he $ substitute (a, t) e
+    apt e t                     = pure $ TyApplication e t
+
     app (TmAbstraction x _ b) a = he $ substitute (x, a) b
     app f@(TmApplication (TmVariable "=") a) b
                                 = eqHelper (a, b) (pure $ TmApplication f b)
@@ -280,8 +327,14 @@ hybridNormal = hn
     he = headSpine
     hn = trace hn'
     hn' e@(TmVariable x)        = M.findWithDefault e x <$> asks fst
+    hn' (TyAbstraction a e)     = inLambda $ etaReduce . TyAbstraction a <$> hn e
     hn' (TmAbstraction x t b)   = inLambda $ etaReduce . TmAbstraction x t <$> hn b
     hn' (TmApplication f a)     = applyM2 app (he f) (pure a)
+    hn' (TyApplication e t)     = applyM2 apt (he e) (pure t)
+
+    apt (TyAbstraction a e) t   = hn $ substitute (a, t) e
+    apt e t                     = pure $ TyApplication e t
+
     app (TmAbstraction x _ b) a = hn $ substitute (x, a) b
     app f@(TmApplication (TmVariable "=") a) b
                                 = eqHelper (a, b) (TmApplication <$> hn f <*> hn b)

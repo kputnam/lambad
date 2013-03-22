@@ -14,3 +14,5 @@ import Control.Applicative
 
 :m + Lambad.SystemF.Parser
 :m + Lambad.SystemF.Syntax
+:m + Lambad.SystemF.Eval
+:m + Lambad.SystemF.Repl
