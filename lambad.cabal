@@ -62,6 +62,7 @@ library
     Lambad.SystemF.Syntax
     Lambad.SystemF.Eval
     Lambad.SystemF.Repl
+    Lambad.SystemF.Substitute
 
 -- test-suite main
 --   type: exitcode-stdio-1.0

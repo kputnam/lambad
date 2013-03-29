@@ -16,3 +16,5 @@ import Control.Applicative
 :m + Lambad.SystemF.Syntax
 :m + Lambad.SystemF.Eval
 :m + Lambad.SystemF.Repl
+
+import Data.Attoparsec.Text (parseOnly)

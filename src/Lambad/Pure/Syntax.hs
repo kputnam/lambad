@@ -34,17 +34,15 @@ instance Pretty Term where
 -- First parameter is precedence level of parent node. Second parameter
 -- is True when this node overrides default left/right associativity.
 prettyTerm :: Int -> Bool -> Term -> Doc
-prettyTerm p s e@(Variable x)
-  | s || p > p' = parens (prettyTerm p' False e)
-  | otherwise   = text (unpack x)
-  where p' = 3
-prettyTerm p s e@(Application f a)
+prettyTerm _ _ (Variable x)        -- 3
+  = text (unpack x)
+prettyTerm p s e@(Application f a) -- 2
   | s || p > p' = parens (prettyTerm p' False e)
   | otherwise   = prettyTerm p' r f <+> prettyTerm p' l a
   where p' = 2
         r  = False
         l  = case a of (Variable _) -> False; _ -> True
-prettyTerm p s e@(Abstraction x b)
+prettyTerm p s e@(Abstraction x b) -- 1
   | s || p > p' = parens (prettyTerm p' False e)
   | otherwise   = text "λ"  <> text (unpack (unwords vars))
                <> text "." <+> prettyTerm p' False (snd inner)

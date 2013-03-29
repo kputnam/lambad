@@ -7,6 +7,7 @@
 (define S lambda x y z. x z (y z))
 (define K lambda x y. x)
 (define I lambda x. x)
+(define U* lambda f. f f)
 (define Y
   (lambda f x. f (x x))
   (lambda f x. f (x x)))
@@ -70,3 +71,8 @@
 (define none?    compose not any?)
 (define map      lambda f. foldr (compose cons f) null)
 (define filter   lambda f. foldr (lambda x. f x (cons x) id) null)
+
+(define !
+  U (lambda loop acc n.
+      (zero? n (lambda _. acc)
+               (lambda _. (loop loop (* n acc) (pred n)))) n) 1)

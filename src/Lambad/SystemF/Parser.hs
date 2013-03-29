@@ -104,7 +104,7 @@ parseTmVar
 
 parseTmVarId :: Parser Text
 parseTmVarId
-  = takeWhile1 (`notElem` " Λλ:\r\n\t([])")
+  = takeWhile1 (`notElem` " Λλ:.\r\n\t([])")
 
 ---------------------------------------------------------------------------
 
