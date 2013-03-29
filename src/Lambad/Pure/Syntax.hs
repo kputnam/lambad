@@ -29,37 +29,28 @@ instance Pretty Definition where
     = parens $ text "define" <+> text (unpack x) <+> pretty e
 
 instance Pretty Term where
-  -- Render (λx.x) (λx.x) instead of λx.x λx.x,
-  pretty (Application f@(Abstraction _ _) x@(Abstraction _ _))
-    = parens (pretty f) <+> parens (pretty x)
+  pretty = prettyTerm (-1) False
 
-  -- Render (λx.x) (e f) instead of (λx. x) e f
-  pretty (Application f@(Abstraction _ _) x@(Application _ _))
-    = parens (pretty f) <+> parens (pretty x)
-
-  -- Render (λx.x) e instead of λx. x e
-  pretty (Application f@(Abstraction _ _) x)
-    = parens (pretty f) <+> pretty x
-
-  -- Render f (λx.x) instead of f λ.x x
-  pretty (Application f x@(Abstraction _ _))
-    = pretty f <+> parens (pretty x)
-
-  -- Render f (g x) instead of f g x
-  pretty (Application f x@(Application _ _))
-    = pretty f <+> parens (pretty x)
-
-  pretty (Application f x)
-    = pretty f <+> pretty x
-
-  pretty (Abstraction x e)
-    = text "λ" <> text (unpack (unwords vars))
-               <> text "." <+> pretty (snd inner)
-    where
-      vars  = reverse (fst inner)
-      inner = collapse ([x], e)
-      collapse (xs, Abstraction x' e') = collapse (x':xs, e')
-      collapse (xs, e')                = (xs, e')
-
-  pretty (Variable x)
-    = text (unpack x)
+-- First parameter is precedence level of parent node. Second parameter
+-- is True when this node overrides default left/right associativity.
+prettyTerm :: Int -> Bool -> Term -> Doc
+prettyTerm p s e@(Variable x)
+  | s || p > p' = parens (prettyTerm p' False e)
+  | otherwise   = text (unpack x)
+  where p' = 3
+prettyTerm p s e@(Application f a)
+  | s || p > p' = parens (prettyTerm p' False e)
+  | otherwise   = prettyTerm p' r f <+> prettyTerm p' l a
+  where p' = 2
+        r  = False
+        l  = case a of (Variable _) -> False; _ -> True
+prettyTerm p s e@(Abstraction x b)
+  | s || p > p' = parens (prettyTerm p' False e)
+  | otherwise   = text "λ"  <> text (unpack (unwords vars))
+               <> text "." <+> prettyTerm p' False (snd inner)
+  where
+    p'    = 1
+    vars  = reverse (fst inner)
+    inner = collapse ([x], b)
+    collapse (xs, Abstraction x' e') = collapse (x':xs, e')
+    collapse (xs, e')                = (xs, e')
