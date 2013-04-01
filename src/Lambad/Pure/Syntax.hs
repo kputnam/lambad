@@ -29,26 +29,38 @@ instance Pretty Definition where
     = parens $ text "define" <+> text (unpack x) <+> pretty e
 
 instance Pretty Term where
-  pretty = prettyTerm (-1) False
+  pretty = prettyTerm 0
 
--- First parameter is precedence level of parent node. Second parameter
--- is True when this node overrides default left/right associativity.
-prettyTerm :: Int -> Bool -> Term -> Doc
-prettyTerm _ _ (Variable x)        -- 3
+-- Parenthesize subexpressions of non-associative operators
+specialTerm :: Int -> Term -> Doc
+specialTerm p e
+  | p == precTerm e = parens (prettyTerm p e)
+  | otherwise       = prettyTerm p e
+
+-- Assign a precedence to each operator (highest precedence binds tightest)
+precTerm :: Term -> Int
+precTerm (Variable _)      = 3
+precTerm (Application _ _) = 2
+precTerm (Abstraction _ _) = 1
+
+-- Parenthesize subexpressions with looser-binding operators than parent
+prettyTerm :: Int -> Term -> Doc
+prettyTerm _ (Variable x)
   = text (unpack x)
-prettyTerm p s e@(Application f a) -- 2
-  | s || p > p' = parens (prettyTerm p' False e)
-  | otherwise   = prettyTerm p' r f <+> prettyTerm p' l a
-  where p' = 2
-        r  = False
-        l  = case a of (Variable _) -> False; _ -> True
-prettyTerm p s e@(Abstraction x b) -- 1
-  | s || p > p' = parens (prettyTerm p' False e)
-  | otherwise   = text "λ"  <> text (unpack (unwords vars))
-               <> text "." <+> prettyTerm p' False (snd inner)
+prettyTerm p e@(Application a b)
+  | p > q     = parens (prettyTerm q e)
+  | otherwise = prettyTerm q a <+> specialTerm q b
+  where q = precTerm e
+prettyTerm p e@(Abstraction a b)
+  | p > q     = parens (prettyTerm q e)
+  | otherwise = text "λ"  <> text (unpack (unwords vars)) <>
+                text ". " <> prettyTerm q body
   where
-    p'    = 1
+    q     = precTerm e
+    body  = snd inner
     vars  = reverse (fst inner)
-    inner = collapse ([x], b)
-    collapse (xs, Abstraction x' e') = collapse (x':xs, e')
-    collapse (xs, e')                = (xs, e')
+    inner = collapse ([a], b)
+
+    -- Sugar "λa. λb. λc. E" to "λa b c. E"
+    collapse (as, Abstraction a' b') = collapse (a':as, b')
+    collapse (as, b')                = (as, b')

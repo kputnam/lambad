@@ -39,60 +39,81 @@ instance Pretty Definition where
     = parens $ text "define" <+> text (unpack x) <+> pretty e
 
 instance Pretty Term where
-  pretty = prettyTerm (-1) False
+  pretty = prettyTerm 0
 
 instance Pretty Type where
-  pretty = prettyType (-1) False
+  pretty = prettyType 0
 
--- First parameter is precedence level of parent node. Second parameter
--- is True when this node overrides default left/right associativity.
-prettyTerm :: Int -> Bool -> Term -> Doc
-prettyTerm _ _ (TmVariable x) -- 5
+-- Parenthesize subexpressions of non-associative operators
+specialPrint :: Int -> a -> (a -> Int) -> (Int -> a -> Doc) -> Doc
+specialPrint p e prec walk
+  | p == prec e = parens (walk p e)
+  | otherwise   = walk p e
+
+-- Assign a precedence to each operator (highest precedence binds tightest)
+precTerm :: Term -> Int
+precTerm (TmVariable _)        = 5
+precTerm (TmApplication _ _)   = 4
+precTerm (TyApplication _ _)   = 4
+precTerm (TmAbstraction _ _ _) = 3
+precTerm (TyAbstraction _ _)   = 3
+
+-- Assign a precedence to each operator (highest precedence binds tightest)
+precType :: Type -> Int
+precType (TyVariable _) = 3
+precType (TyArrow _ _)  = 2
+precType (TyForall _ _) = 1
+
+-- Parenthesize subexpressions with looser-binding operators than parent
+prettyTerm :: Int -> Term -> Doc
+prettyTerm _ (TmVariable x)
   = text (unpack x)
-prettyTerm p s e@(TmApplication f a) -- 4
-  | s || p > p' = parens (prettyTerm p' False e)
-  | otherwise   = prettyTerm p' r f <+> prettyTerm p' l a
-  where p' = 4
-        r  = False
-        l  = case a of (TmVariable _) -> False; _ -> True
-prettyTerm p s e@(TyApplication f a) -- 4
-  | s || p > p' = parens (prettyTerm p' False e)
-  | otherwise   = prettyTerm p' r f <+> brackets (pretty a)
-  where p' = 4
-        r  = False
-prettyTerm p s e@(TmAbstraction _ _ _) -- 3
-  | s || p > p' = parens (prettyTerm p' False e)
-  | otherwise   = text "λ" <> collapse e ""
+prettyTerm p e@(TmApplication a b)
+  | p > q     = parens (prettyTerm q e)
+  | otherwise = prettyTerm q a <+> specialPrint q b precTerm prettyTerm
+  where q = precTerm e
+prettyTerm p e@(TyApplication a b)
+  | p > q     = parens (prettyTerm q e)
+  | otherwise = prettyTerm q a <+> brackets (prettyType 0 b)
+  where q = precTerm e
+prettyTerm p e@(TmAbstraction _ _ _)
+  | p > q     = parens (prettyTerm q e)
+  | otherwise = text "λ" <> collapse e ""
   where
-    p' = 3
+    q = precTerm e
     collapse (TmAbstraction x t b) w
-                 = text (unpack (w <> x <> ":"))
-                <> prettyType p' False t <> collapse b " "
+                 = text (unpack (w <> x <> ":")) <> prettyType q t <> collapse b " "
     collapse b _ = text "." <+> pretty b
-prettyTerm p s e@(TyAbstraction x b) -- 3
-  | s || p > p' = parens (prettyTerm p' False e)
+prettyTerm p e@(TyAbstraction a b)
+  | p > q     = parens (prettyTerm q e)
   | otherwise   = text "Λ"  <> text (unpack (unwords vars))
-                            <> text ". " <> prettyTerm p' False (snd inner)
+                            <> text ". " <> prettyTerm q body
   where
-    p'    = 3
+    q     = precTerm e
     vars  = reverse (fst inner)
-    inner = collapse ([x], b)
-    collapse (xs, TyAbstraction x' e') = collapse (x':xs, e')
-    collapse (xs, e')                  = (xs, e')
+    body  = snd inner
+    inner = collapse ([a], b)
+    collapse (as, TyAbstraction a' b') = collapse (a':as, b')
+    collapse (as, b')                  = (as, b')
 
--- First parameter is precedence level of parent node. Second parameter
--- is True when this node overrides default left/right associativity.
-prettyType :: Int -> Bool -> Type -> Doc
-prettyType _ _ (TyVariable a)   -- 3
+-- Parenthesize subexpressions with looser-binding operators than parent
+prettyType :: Int -> Type -> Doc
+prettyType _ (TyVariable a)
   = text (unpack a)
-prettyType p s e@(TyArrow i o)  -- 2
-  | s || p > p' = parens (prettyType p' False e)
-  | otherwise   = prettyType p' l i <+> text "→" <+> prettyType p' r o
-  where p' = 2
-        l  = case i of (TyArrow _ _) -> True; _ -> False
-        r  = False
-prettyType p s e@(TyForall a t) -- 1
-  | s || p > p' = parens (prettyType p' False e)
-  | otherwise   = text (unpack ("∀" <> a <> ".")) <+> prettyType p' False t
-  where p' = 1
+prettyType p e@(TyArrow a b)
+  | p > q     = parens (prettyType q e)
+  | otherwise = specialPrint q a precType prettyType <+> text "→" <+> prettyType q b
+  where q = precType e
+prettyType p e@(TyForall a b)
+  | p > q     = parens (prettyType q e)
+  | otherwise = text "∀"  <> text (unpack (unwords vars)) <>
+                text ". " <> prettyType q body
+  where
+    q     = precType e
+    body  = snd inner
+    vars  = reverse (fst inner)
+    inner = collapse ([a], b)
 
+    -- Sugar "∀a. ∀b. ∀c. E" to "∀a b c. E"
+    collapse (as, TyForall a' b') = collapse (a':as, b')
+    collapse (as, b')             = (as, b')
