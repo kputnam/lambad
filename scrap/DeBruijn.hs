@@ -17,10 +17,10 @@ data Pair a
   deriving (Show, Read, Eq, Ord)
 
 instance Functor Pair where
-  fmap f (Pair fst snd) = Pair (f fst) (f snd)
+  fmap g (Pair f s) = Pair (g f) (g s)
 
 instance Applicative Pair where
-  pure a                = Pair a a
+  pure a = Pair a a
   Pair f g <*> Pair x y = Pair (f x) (g y)
 
 
@@ -67,10 +67,17 @@ instance Applicative Term where
   f     <*> Abs p = error "todo"
 
 instance Monad Term where
-  return      = pure
-  Var a >>= f = f a
-  App p >>= f = error "todo"
-  Abs e >>= f = error "todo"
+  return  = pure
+  t >>= f = joinT (fmap f t)
+
+joinT :: Term (Term a) -> Term a
+joinT = gfoldT id App Abs distT
+  where
+    distT :: Nat (Term a) -> Term (Nat a)
+    distT Z     = Var Z
+    distT (S a) = fmap S a
+
+
 
 
 -- Polymorphic function f :: M a -> N a, where N and M are given
@@ -81,9 +88,10 @@ instance Monad Term where
 -- following *naturality condition*
 --
 --    mapN k . f = f . mapM k
---
---
---
+
+
+
+
 -- N is an arbitrary type constructor. Since v, a, and l are
 -- themselves natural transformations, `foldT v a l` is also
 -- a natural transformation:
@@ -101,23 +109,70 @@ foldT :: (forall a. a -> n a)          -- Id a       -> N a
 -- foldT v _ _ (Var x) = v x
 -- foldT v a l (App p) = a (fmap (foldT v a l) p)
 -- foldT v a l (Abs e) = l (foldT v a l e)
-foldT v a l = goldT v' a l swap . fmap Id
+foldT v a l = gfoldT v' a l swap . fmap Id
   where
     v' (Id a)       = v a
     swap Z          = Id Z
     swap (S (Id a)) = Id (S a)
 
-
 -- This is a more general fold operator on the nested datatype Term,
 -- with the argument `v` generalized from a to m a for an arbitrary
 -- type constructor, and k is used to change Term (Nat (m b)) into
 -- Term (m (Nat b)) which fits the recursive call.
-goldT :: (forall a. m a -> n a)
-      -> (forall a. Pair (n a) -> n a)
-      -> (forall a. n (Nat a) -> n a)
-      -> (forall a. Nat (m a) -> m (Nat a))
-      -> Term (m b)
-      -> n b
-goldT v _ _ _ (Var x) = v x
-goldT v a l k (App p) = a (fmap (goldT v a l k) p)
-goldT v a l k (Abs e) = l (goldT v a l k (fmap k e))
+gfoldT :: (forall a. m a -> n a)
+       -> (forall a. Pair (n a) -> n a)
+       -> (forall a. n (Nat a) -> n a)
+       -> (forall a. Nat (m a) -> m (Nat a))
+       -> Term (m b)
+       -> n b
+gfoldT v _ _ _ (Var x) = v x
+gfoldT v a l k (App p) = a (fmap (gfoldT v a l k) p)
+gfoldT v a l k (Abs e) = l (gfoldT v a l k (fmap k e))
+
+-- This term has exactly the same definition as gfoldT, but its type
+-- is an instantiation of gfoldT's type (assume isomorphic types are
+-- equal) where M = Const a and N = Const b (then M a ~ a and N a ~ b):
+kfoldT :: (a -> b)        -- Const a a        -> Const b a
+       -> (Pair b -> b)   -- Pair (Const b a) -> Const b a
+       -> (b -> b)        -- Const b (Nat a)  -> Const b a
+       -> (Nat a -> a)    -- Nat (Const a a)  -> Const a (Nat a)
+       -> Term a          -- Term (Const a b)
+       -> b               -- Const b b
+kfoldT v _ _ _ (Var x) = v x
+kfoldT v a l k (App p) = a (fmap (kfoldT v a l k) p)
+kfoldT v a l k (Abs e) = l (kfoldT v a l k (fmap k e))
+
+showT :: Term String -> String
+showT = kfoldT id showP ('L':) showI
+  where
+    showP (Pair f s)
+                = "(" ++ f ++ " " ++ s ++ ")"
+    showI Z     = "Z"
+    showI (S a) = 'S':a
+
+showC :: Term Char -> String
+showC = showT . fmap return
+
+
+
+
+-- Creating a new abstraction over a free variable x in E means each
+-- free occurrence of x becomes Z (zero) and every other variable is
+-- incremented: y becomes S y.
+abstract :: Eq a => a -> Term a -> Term a
+abstract x = Abs . fmap (match x)
+
+match :: Eq a => a -> a -> Nat a
+match n m
+  | n == m    = Z
+  | otherwise = S m
+
+-- Function application
+apply :: Term a -> Term (Nat a) -> Term a
+apply t = joinT . fmap (subst t . fmap Var)
+
+-- This is the left-inverse of match t
+subst :: a -> Nat a -> a
+subst _ (S x) = x
+subst x _     = x
+
