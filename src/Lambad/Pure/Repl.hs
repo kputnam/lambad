@@ -18,9 +18,9 @@ import Lambad.Pure.Parser
 import Lambad.Pure.Syntax
 
 eval :: Pretty a => (Term -> Eval a)
-                -> Environment a
-                -> T.Text
-                -> (Either T.Text a, [Step a])
+                 -> Environment a
+                 -> T.Text
+                 -> (Either T.Text a, [Step a])
 eval interpreter environment code
   = case ast of
       Right e -> runEval environment (interpreter e)

@@ -24,11 +24,12 @@ instance ToJS Term where
 instance ToJS Definition where
   toJS (Definition x e) = "var " <> mangle x <> " = " <> toJS e <> ";"
 
+-- Rename identifiers to avoid conflicts with JavaScript
 mangle :: Text -> Text
-mangle t = if isKeyword t
-           then "__" <> t
-           else let (n, x) = span isDigit t
-                 in (if n == "" then "" else "__") <> n <> substitute x
+mangle t
+  | isKeyword t = "__" <> t
+  | otherwise   = let (n, x) = span isDigit t
+                   in (if n == "" then "" else "__") <> n <> substitute x
   where
     isDigit   = flip elem "0123456789"
     isKeyword = flip elem ["break","const","continue","delete","do","while"
